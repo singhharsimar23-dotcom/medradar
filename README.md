@@ -132,7 +132,3 @@ npm run build
 
 ---
 
-## 6. License & Institutional Context
-
-Engineered for the **Directorate of Health Services, Madhya Pradesh**.  
-Licensed under the **MIT License**.
