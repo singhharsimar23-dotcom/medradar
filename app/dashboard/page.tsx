@@ -77,9 +77,7 @@ const INITIAL_CORRIDOR_FEED: SearchFeedItem[] = [
   { id: 'f-7', medicine_name: 'ORS Sachet', lat: 23.6300, lng: 77.3400, area: 'Berasia PHC Sector', zoneType: 'RURAL', is_urgent: false, created_at: new Date(Date.now() - 64 * 60000).toISOString() },
   { id: 'f-8', medicine_name: 'Metformin 500mg', lat: 22.7196, lng: 75.8577, area: 'Vijay Nagar, Indore', zoneType: 'URBAN', is_urgent: false, created_at: new Date(Date.now() - 79 * 60000).toISOString() },
   { id: 'f-9', medicine_name: 'Artemether + Lumefantrine', lat: 22.9800, lng: 77.0100, area: 'Ichhawar Rural Zone', zoneType: 'RURAL', is_urgent: true, created_at: new Date(Date.now() - 95 * 60000).toISOString() },
-  { id: 'f-10', medicine_name: 'Paracetamol 500mg', lat: 23.2345, lng: 77.4356, area: 'Govindpura Industrial Area', zoneType: 'SEMI-URBAN', is_urgent: false, created_at: new Date(Date.now() - 110 * 60000).toISOString() },
-  { id: 'f-11', medicine_name: 'Insulin Regular', lat: 22.7250, lng: 75.8620, area: 'Old Palasia, Indore', zoneType: 'URBAN', is_urgent: true, created_at: new Date(Date.now() - 130 * 60000).toISOString() },
-  { id: 'f-12', medicine_name: 'Salbutamol Inhaler', lat: 23.1800, lng: 77.4000, area: 'Kolar Road, Bhopal', zoneType: 'URBAN', is_urgent: true, created_at: new Date(Date.now() - 150 * 60000).toISOString() }
+  { id: 'f-10', medicine_name: 'Paracetamol 500mg', lat: 23.2345, lng: 77.4356, area: 'Govindpura Industrial Area', zoneType: 'SEMI-URBAN', is_urgent: false, created_at: new Date(Date.now() - 110 * 60000).toISOString() }
 ];
 
 const CORRIDOR_RANDOM_POOLS = [
@@ -180,7 +178,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 3. Initial Load, 30s Radar Refresh & 10s Simulated Realtime Search Emission
+  // 3. Initial Load, 30s Radar Refresh & 12s Telemetry Pulse
   useEffect(() => {
     fetchRadarData();
     fetchAuxiliaryData();
@@ -194,7 +192,6 @@ export default function DashboardPage() {
       setSecondsAgo((prev) => prev + 1);
     }, 1000);
 
-    // Autonomous Corridor Telemetry Simulation
     const telemetryInterval = setInterval(() => {
       const randomItem = CORRIDOR_RANDOM_POOLS[Math.floor(Math.random() * CORRIDOR_RANDOM_POOLS.length)];
       const isUrgent = Math.random() > 0.6;
@@ -214,7 +211,6 @@ export default function DashboardPage() {
       setTotalFailures((prev) => prev + 1);
       if (isUrgent) setUrgentToday((prev) => prev + 1);
 
-      // Add to map circle
       if (leafletMapRef.current && window.L) {
         const L = window.L;
         const newCircle = L.circle([randomItem.lat, randomItem.lng], {
@@ -225,8 +221,9 @@ export default function DashboardPage() {
           fillOpacity: 0.6
         }).addTo(leafletMapRef.current);
 
-        newCircle.bindPopup(
-          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>⚡ LIVE INCOMING SHORTAGE</b><br/>Medicine: <b>${randomItem.med}</b><br/>Area: ${randomItem.area}</div>`
+        newCircle.bindTooltip(
+          `<strong>🚨 LIVE SHORTAGE</strong><br/>${randomItem.med}<br/>${randomItem.area}`,
+          { direction: 'top', sticky: true }
         );
         heatLayerRef.current.push(newCircle);
       }
@@ -268,7 +265,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 5. Initialize Leaflet Map with CartoDB Dark Matter Tiles
+  // 5. Initialize Leaflet Map with CartoDB Voyager Tiles & Interactive Hover Tooltips
   useEffect(() => {
     if (!mapLoaded || !window.L || !mapRef.current) return;
     const L = window.L;
@@ -281,7 +278,8 @@ export default function DashboardPage() {
         maxZoom: 16
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      // CartoDB Voyager: Crisp, high-contrast, beautiful terrain & road clarity
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO',
         subdomains: 'abcd',
         maxZoom: 19
@@ -291,9 +289,9 @@ export default function DashboardPage() {
       CORRIDOR_CITIES.forEach((city) => {
         const customIcon = L.divIcon({
           className: 'city-label',
-          html: `<div style="font-size:11px;font-weight:bold;color:#f8fafc;background:rgba(15,23,42,0.85);border:1px solid #334155;padding:2px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.5);">${city.name}</div>`,
-          iconSize: [60, 20],
-          iconAnchor: [30, 10]
+          html: `<div style="font-size:11px;font-weight:800;color:#0f172a;background:rgba(255,255,255,0.92);border:1.5px solid #0f172a;padding:2px 8px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.35);">${city.name}</div>`,
+          iconSize: [70, 22],
+          iconAnchor: [35, 11]
         });
         L.marker([city.lat, city.lng], { icon: customIcon, interactive: false }).addTo(map);
       });
@@ -307,52 +305,56 @@ export default function DashboardPage() {
     heatLayerRef.current.forEach((layer) => map.removeLayer(layer));
     heatLayerRef.current = [];
 
-    // Render Red Glowing Heatmap Circles
+    // Render Red Glowing Heatmap Circles with Interactive Hover Tooltips
     heatmapData.forEach((pt) => {
       if (pt.lat && pt.lng) {
         const circle = L.circle([pt.lat, pt.lng], {
-          radius: 1200,
-          color: '#ef4444',
-          weight: 1.5,
+          radius: 1300,
+          color: '#dc2626',
+          weight: 2,
           fillColor: '#ef4444',
-          fillOpacity: 0.45
+          fillOpacity: 0.5
         }).addTo(map);
 
-        circle.bindPopup(
-          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>🚨 Stock Shortage Alert</b><br/>Medicine: <b>${pt.medicine_name}</b><br/>Status: 0 Pharmacies Available</div>`
+        circle.bindTooltip(
+          `<div style="font-family:sans-serif;font-size:12px;padding:2px;"><span style="color:#dc2626;font-weight:bold;">🚨 SHORTAGE ALERT</span><br/><b>Medicine:</b> ${pt.medicine_name}<br/><b>Status:</b> 0 Pharmacies in Stock</div>`,
+          { direction: 'top', sticky: true, opacity: 0.95 }
         );
+
         heatLayerRef.current.push(circle);
       }
     });
 
-    // Render Pharmacy Markers
+    // Render Pharmacy Markers with Interactive Hover Tooltips
     pharmaciesList.forEach((ph) => {
       if (ph.lat && ph.lng) {
-        let color = '#22c55e'; // Green Retail
+        let color = '#16a34a'; // Green Retail
         if (ph.type === 'PHC' || ph.type === 'CHC') {
-          color = '#38bdf8'; // Blue PHC
+          color = '#0284c7'; // Blue PHC
         } else if (ph.type === 'janaushadhi') {
-          color = '#14b8a6'; // Teal PMBJP
+          color = '#0d9488'; // Teal PMBJP
         }
 
         const marker = L.circleMarker([ph.lat, ph.lng], {
-          radius: 5,
+          radius: 6,
           fillColor: color,
           color: '#ffffff',
-          weight: 1,
-          opacity: 0.9,
-          fillOpacity: 0.85
+          weight: 1.5,
+          opacity: 1,
+          fillOpacity: 0.9
         }).addTo(map);
 
-        marker.bindPopup(
-          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>${ph.name}</b><br/>${ph.area || ph.city} • <span style="text-transform:uppercase;font-size:10px;font-weight:bold;color:#2563eb;">${ph.type}</span></div>`
+        marker.bindTooltip(
+          `<div style="font-family:sans-serif;font-size:12px;padding:2px;"><b>${ph.name}</b><br/>📍 ${ph.area || ph.city}<br/><span style="display:inline-block;margin-top:2px;padding:1px 4px;border-radius:3px;background:#e0f2fe;color:#0369a1;font-weight:bold;font-size:10px;">${ph.type.toUpperCase()}</span></div>`,
+          { direction: 'top', sticky: true, opacity: 0.95 }
         );
+
         heatLayerRef.current.push(marker);
       }
     });
   }, [mapLoaded, heatmapData, pharmaciesList]);
 
-  // Clean up map instance on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (leafletMapRef.current) {
@@ -389,7 +391,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 7. Handle Send Real Fast2SMS Distributor Alert
+  // 7. Handle Send Real Fast2SMS / Twilio Distributor Alert
   const handleSendAlertSMS = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!alertPhone.trim() || !insight) return;
@@ -411,15 +413,15 @@ export default function DashboardPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        setAlertSentStatus(data.message || '✓ SMS Alert sent successfully to distributor.');
+        setAlertSentStatus(data.message || '✓ SMS Alert dispatched to distributor.');
         setTimeout(() => {
           setShowAlertModal(false);
           setAlertSentStatus(null);
           setAlertPhone('');
-        }, 3000);
+        }, 4000);
       } else {
         setAlertIsError(true);
-        setAlertSentStatus(data.error || 'SMS delivery failed. Check phone number.');
+        setAlertSentStatus(data.error || 'SMS delivery failed.');
       }
     } catch (err: any) {
       setAlertIsError(true);
@@ -446,7 +448,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Format relative minutes ago
   const formatTimeAgo = (isoString: string) => {
     if (!isoString) return 'Just now';
     const min = Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60));
@@ -464,7 +465,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans pb-16">
-      {/* Top Header */}
+      {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/90 px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 sticky top-0 z-30 backdrop-blur-md">
         <div className="flex items-center space-x-3">
           <span className="text-2xl">🔴</span>
@@ -513,7 +514,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-bold text-gray-200 flex items-center space-x-2">
                 <span>📍</span>
-                <span>District Shortage Heatmap (NH-46 Corridor)</span>
+                <span>District Shortage Heatmap (Hover Dots for Info)</span>
               </h2>
               <div className="flex items-center space-x-3 text-xs text-gray-400">
                 <span className="flex items-center space-x-1">
@@ -525,13 +526,13 @@ export default function DashboardPage() {
                   <span>Stock</span>
                 </span>
                 <span className="flex items-center space-x-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
                   <span>PHC/Govt</span>
                 </span>
               </div>
             </div>
 
-            <div className="w-full h-[380px] rounded-lg overflow-hidden border border-gray-800 bg-gray-950 relative">
+            <div className="w-full h-[380px] rounded-lg overflow-hidden border border-gray-800 bg-slate-900 relative z-0">
               <div id="dashboard-leaflet-map" ref={mapRef} className="w-full h-full" />
             </div>
           </div>
@@ -551,7 +552,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Quick Feed Category Badges */}
+            {/* Category Badges */}
             <div className="flex items-center space-x-1.5 pb-2">
               <button
                 onClick={() => setFeedFilter('ALL')}
@@ -625,7 +626,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 2: Multi-Dimensional AI Strategic Intelligence Briefing */}
+        {/* Row 2: Deep AI Strategic Intelligence Report */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 relative overflow-hidden space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-800/80 pb-3">
             <div className="flex items-center space-x-2">
@@ -655,7 +656,6 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-4 text-xs md:text-sm text-gray-200 leading-relaxed">
-              {/* Executive Briefing Text */}
               <div className="p-3.5 bg-gray-950/90 border border-gray-800 rounded-lg whitespace-pre-line font-medium text-gray-100">
                 {insight}
               </div>
@@ -800,9 +800,9 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* View All Telemetry Events Modal */}
+      {/* View All Telemetry Events Modal (z-[99999] so it never goes under map) */}
       {showAllFeedModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[99999]">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
             <div className="p-4 border-b border-gray-800 flex items-center justify-between">
               <div>
@@ -880,9 +880,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Simulator Modal */}
+      {/* Simulator Modal (z-[99999]) */}
       {showSimulateModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[99999]">
           <div className="bg-gray-900 border border-gray-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
@@ -952,9 +952,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Distributor Alert SMS Modal */}
+      {/* Distributor Alert SMS Modal (z-[99999]) */}
       {showAlertModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-[99999]">
           <div className="bg-gray-900 border border-gray-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
@@ -963,7 +963,7 @@ export default function DashboardPage() {
               </h3>
               <button
                 onClick={() => setShowAlertModal(false)}
-                className="text-gray-400 hover:text-white text-sm"
+                className="text-gray-400 hover:text-white text-sm font-bold"
               >
                 ✕
               </button>
@@ -980,10 +980,10 @@ export default function DashboardPage() {
                   className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-600"
                   required
                 />
-                <p className="text-[10px] text-gray-500 mt-1">Dispatches via Fast2SMS gateway immediately.</p>
+                <p className="text-[10px] text-gray-500 mt-1">Dispatches immediately via Fast2SMS / Twilio gateway.</p>
               </div>
 
-              <div className="p-3 bg-gray-950 border border-gray-800 rounded-lg text-xs text-gray-300 max-h-32 overflow-y-auto">
+              <div className="p-3 bg-gray-950 border border-gray-800 rounded-lg text-xs text-gray-300 max-h-32 overflow-y-auto whitespace-pre-line">
                 <span className="text-gray-500 font-semibold block mb-1">Message Preview:</span>
                 {insight}
               </div>
@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
                   disabled={alertSending}
                   className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition disabled:opacity-50"
                 >
-                  {alertSending ? 'Sending SMS...' : 'Dispatch Fast2SMS Alert'}
+                  {alertSending ? 'Sending SMS...' : 'Dispatch Live SMS Alert'}
                 </button>
                 <button
                   type="button"

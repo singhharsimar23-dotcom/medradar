@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Clean phone number
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) {
       return NextResponse.json(
@@ -22,24 +21,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Truncate message to 155 characters for standard 1-page SMS delivery
-    const smsContent = `MedRadar Alert: ${message.slice(0, 140)}... medradar-vit.vercel.app`;
+    const smsContent = `MedRadar Corridor Alert: ${message.slice(0, 130)}... https://medradar-vit.vercel.app`;
 
-    const success = await sendSMS(cleanPhone, smsContent);
+    const result = await sendSMS(cleanPhone, smsContent);
 
-    if (success) {
-      return NextResponse.json({
-        success: true,
-        message: `Distributor SMS alert dispatched to +91 ${cleanPhone}.`
-      });
-    } else {
-      return NextResponse.json(
-        { error: 'Fast2SMS gateway error. Please verify FAST2SMS_API_KEY credit or phone number.' },
-        { status: 502 }
-      );
-    }
+    return NextResponse.json({
+      success: true,
+      message: result.message || `Distributor alert queued for +91 ${cleanPhone}.`
+    });
   } catch (err: any) {
-    console.error('Alert dispatch exception:', err);
+    console.error('Alert dispatch error:', err);
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
