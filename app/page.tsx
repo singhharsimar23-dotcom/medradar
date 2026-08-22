@@ -3,14 +3,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Browser-level Supabase client for realtime subscription
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://imomuyjjbxrtibbsgsba.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 declare global {
   interface Window {
-    L: any;
+    maplibregl: any;
   }
 }
 
@@ -62,7 +61,7 @@ export default function PatientPage() {
   const [nearestPHC, setNearestPHC] = useState<NearestPHC | null>(null);
 
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const leafletMapRef = useRef<any>(null);
+  const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
 
   // 1. Request User Location
@@ -71,9 +70,15 @@ export default function PatientPage() {
     if (typeof window !== 'undefined' && 'geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setUserLat(pos.coords.latitude);
-          setUserLng(pos.coords.longitude);
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setUserLat(lat);
+          setUserLng(lng);
           setLocationGranted(true);
+
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.flyTo({ center: [lng, lat], zoom: 13 });
+          }
         },
         (err) => {
           console.warn('Geolocation error:', err);
@@ -91,34 +96,34 @@ export default function PatientPage() {
     requestLocation();
   }, [requestLocation]);
 
-  // 2. Dynamically Load Leaflet via CDN
+  // 2. Dynamically Load MapLibre GL JS via CDN
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (window.L) {
+    if (window.maplibregl) {
       setMapLoaded(true);
       return;
     }
 
-    // Inject Leaflet CSS
-    if (!document.getElementById('leaflet-cdn-css')) {
+    // Inject MapLibre CSS
+    if (!document.getElementById('maplibre-css')) {
       const link = document.createElement('link');
-      link.id = 'leaflet-cdn-css';
+      link.id = 'maplibre-css';
       link.rel = 'stylesheet';
-      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+      link.href = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.css';
       document.head.appendChild(link);
     }
 
-    // Inject Leaflet JS
-    if (!document.getElementById('leaflet-cdn-js')) {
+    // Inject MapLibre JS
+    if (!document.getElementById('maplibre-js')) {
       const script = document.createElement('script');
-      script.id = 'leaflet-cdn-js';
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      script.id = 'maplibre-js';
+      script.src = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.js';
       script.async = true;
       script.onload = () => {
         setMapLoaded(true);
       };
-      document.body.appendChild(script);
+      document.head.appendChild(script);
     }
   }, []);
 
@@ -167,90 +172,127 @@ export default function PatientPage() {
     [locationGranted, userLat, userLng, searchQuery, isUrgent]
   );
 
-  // 4. Initialize & Update Leaflet Map
+  // 4. Initialize & Update MapLibre Map and Vector Markers
   useEffect(() => {
-    if (!mapLoaded || !window.L || !mapRef.current || userLat === null || userLng === null) {
+    if (!mapLoaded || !window.maplibregl || !mapRef.current) {
       return;
     }
 
-    const L = window.L;
+    if (!mapInstanceRef.current) {
+      const initialCenter = userLng && userLat ? [userLng, userLat] : [76.75, 23.05];
+      const initialZoom = userLng && userLat ? 13 : 9;
 
-    if (!leafletMapRef.current) {
-      const map = L.map(mapRef.current).setView([userLat, userLng], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 18
-      }).addTo(map);
-      leafletMapRef.current = map;
+      const map = new window.maplibregl.Map({
+        container: mapRef.current,
+        style: 'https://tiles.openfreemap.org/styles/liberty',
+        center: initialCenter,
+        zoom: initialZoom,
+        maxBounds: [
+          [75.60, 22.60],
+          [77.65, 23.50]
+        ]
+      });
+
+      mapInstanceRef.current = map;
     }
 
-    const map = leafletMapRef.current;
+    const map = mapInstanceRef.current;
 
     // Clear old markers
-    markersRef.current.forEach((m) => map.removeLayer(m));
+    markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Add Blue User Marker
-    const userMarker = L.circleMarker([userLat, userLng], {
-      radius: 8,
-      fillColor: '#2563eb',
-      color: '#ffffff',
-      weight: 2,
-      opacity: 1,
-      fillOpacity: 0.9
-    })
-      .addTo(map)
-      .bindPopup('<b>Aapki Location</b>');
-    markersRef.current.push(userMarker);
+    // Add User Location Marker
+    if (userLat !== null && userLng !== null) {
+      const userEl = document.createElement('div');
+      userEl.style.cssText =
+        'width:14px;height:14px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px #2563eb;cursor:pointer;';
+      const userMarker = new window.maplibregl.Marker({ element: userEl })
+        .setLngLat([userLng, userLat])
+        .setPopup(
+          new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+            '<strong>Aapki Location</strong>'
+          )
+        )
+        .addTo(map);
+      markersRef.current.push(userMarker);
+    }
 
-    const bounds = L.latLngBounds([[userLat, userLng]]);
+    // Add Pharmacy Markers
+    results.forEach((pharmacy) => {
+      if (pharmacy.lat && pharmacy.lng) {
+        let color = '#16a34a'; // default green
 
-    // Add Green Markers for Result Pharmacies
-    results.forEach((ph) => {
-      if (ph.lat !== null && ph.lng !== null) {
-        const marker = L.circleMarker([ph.lat, ph.lng], {
-          radius: 9,
-          fillColor: '#16a34a',
-          color: '#ffffff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.9
-        })
-          .addTo(map)
-          .bindPopup(
-            `<b>${ph.name}</b><br/>${ph.distance} km • ${ph.is_open ? 'Open' : 'Closed'}`
-          );
+        if (!pharmacy.is_open) {
+          color = '#dc2626'; // red
+        } else if (pharmacy.type === 'PHC' || pharmacy.type === 'CHC') {
+          color = '#3b82f6'; // blue
+        } else if (pharmacy.type === 'janaushadhi') {
+          color = '#0d9488'; // teal
+        } else if (pharmacy.type === 'district_hospital' || pharmacy.type === 'hospital') {
+          color = '#7c3aed'; // purple
+        }
+
+        const el = document.createElement('div');
+        el.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;`;
+
+        const popup = new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+          `<strong>${pharmacy.name}</strong><br/>${pharmacy.distance.toFixed(1)}km • ${
+            pharmacy.is_open ? 'Open' : 'Closed'
+          }`
+        );
+
+        const marker = new window.maplibregl.Marker({ element: el })
+          .setLngLat([pharmacy.lng, pharmacy.lat])
+          .setPopup(popup)
+          .addTo(map);
+
         markersRef.current.push(marker);
-        bounds.extend([ph.lat, ph.lng]);
       }
     });
 
-    // Add Gray Marker for nearestPHC if present
-    if (nearestPHC && nearestPHC.lat !== null && nearestPHC.lng !== null) {
-      const phcMarker = L.circleMarker([nearestPHC.lat, nearestPHC.lng], {
-        radius: 8,
-        fillColor: '#64748b',
-        color: '#ffffff',
-        weight: 2,
-        opacity: 1,
-        fillOpacity: 0.9
-      })
-        .addTo(map)
-        .bindPopup(`<b>${nearestPHC.name} (Sarkaari)</b><br/>${nearestPHC.distance} km`);
+    // Add Nearest PHC Marker if Present
+    if (nearestPHC && nearestPHC.lat && nearestPHC.lng) {
+      const phcEl = document.createElement('div');
+      phcEl.style.cssText =
+        'width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;';
+
+      const phcPopup = new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
+        `<strong>${nearestPHC.name} (Sarkaari)</strong><br/>${nearestPHC.distance.toFixed(1)}km`
+      );
+
+      const phcMarker = new window.maplibregl.Marker({ element: phcEl })
+        .setLngLat([nearestPHC.lng, nearestPHC.lat])
+        .setPopup(phcPopup)
+        .addTo(map);
+
       markersRef.current.push(phcMarker);
-      bounds.extend([nearestPHC.lat, nearestPHC.lng]);
     }
 
-    if (results.length > 0 || nearestPHC) {
-      map.fitBounds(bounds, { padding: [30, 30] });
-    } else {
-      map.setView([userLat, userLng], 13);
+    // Zoom to fit results
+    if (results.length > 0) {
+      const bounds = new window.maplibregl.LngLatBounds();
+      results.forEach((r) => {
+        if (r.lng && r.lat) bounds.extend([r.lng, r.lat]);
+      });
+      if (userLng && userLat) {
+        bounds.extend([userLng, userLat]);
+      }
+      map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
 
-    return () => {
-      // Map cleanup on unmount
-    };
+    return () => {};
   }, [mapLoaded, results, nearestPHC, userLat, userLng]);
+
+  // Clean up MapLibre instance on component unmount
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
 
   // 5. Supabase Realtime Subscription for Stock Updates
   useEffect(() => {
@@ -404,7 +446,7 @@ export default function PatientPage() {
           </div>
         )}
 
-        {/* Leaflet Map Section (shown after search when results exist) */}
+        {/* MapLibre GL Map Section (shown after search when results exist) */}
         {results.length > 0 && (
           <section className="rounded-xl overflow-hidden border border-gray-300 shadow-sm">
             <div id="medradar-map" ref={mapRef} className="w-full h-[250px] bg-gray-100" />
@@ -490,7 +532,7 @@ export default function PatientPage() {
             {nearestPHC && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
                 <p className="font-semibold">
-                  🏥 Sarkaari option: {nearestPHC.name} ({nearestPHC.distance}km)
+                  🏥 Sarkaari option: {nearestPHC.name} ({nearestPHC.distance.toFixed(1)}km)
                 </p>
                 <p className="text-xs text-blue-700 mt-0.5">Generic medicines available</p>
                 {nearestPHC.phone && (

@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 declare global {
   interface Window {
-    L: any;
+    maplibregl: any;
   }
 }
 
@@ -56,6 +56,15 @@ interface PendingPharmacy {
   lng: number;
 }
 
+const CORRIDOR_CITIES = [
+  { name: 'Bhopal', lng: 77.4126, lat: 23.2599 },
+  { name: 'Sehore', lng: 77.0857, lat: 23.2003 },
+  { name: 'Ashta', lng: 76.7206, lat: 23.0186 },
+  { name: 'Dewas', lng: 76.0511, lat: 22.9623 },
+  { name: 'Indore', lng: 75.8577, lat: 22.7196 },
+  { name: 'Obaidullaganj', lng: 77.2500, lat: 23.1170 }
+];
+
 export default function DashboardPage() {
   const [insight, setInsight] = useState<string>('');
   const [insightGeneratedAt, setInsightGeneratedAt] = useState<string>('');
@@ -88,9 +97,9 @@ export default function DashboardPage() {
 
   // Map references
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const leafletMapRef = useRef<any>(null);
-  const heatLayerRef = useRef<any[]>([]);
-  const mapLoadedRef = useRef(false);
+  const mapInstanceRef = useRef<any>(null);
+  const pharmacyMarkersRef = useRef<any[]>([]);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   // 1. Fetch Radar Intelligence Data
   const fetchRadarData = useCallback(async () => {
@@ -121,7 +130,6 @@ export default function DashboardPage() {
   // 2. Fetch Live Feed & Pending Pharmacies
   const fetchAuxiliaryData = useCallback(async () => {
     try {
-      // Fetch recent 15 failed searches
       const { data: feedData } = await supabase
         .from('searches')
         .select('*')
@@ -133,7 +141,6 @@ export default function DashboardPage() {
         setLiveFeed(feedData);
       }
 
-      // Count urgent today
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const { count: urgentCount } = await supabase
@@ -146,7 +153,6 @@ export default function DashboardPage() {
         setUrgentToday(urgentCount);
       }
 
-      // Fetch pending pharmacies
       const { data: pendingData } = await supabase
         .from('pharmacies')
         .select('id, name, area, phone, lat, lng')
@@ -156,7 +162,6 @@ export default function DashboardPage() {
         setPendingPharmacies(pendingData);
       }
 
-      // Fetch pharmacies list for simulation dropdown
       const simRes = await fetch('/api/simulate');
       const simData = await simRes.json();
       if (simData.pharmacies) {
@@ -187,141 +192,179 @@ export default function DashboardPage() {
     };
   }, [fetchRadarData, fetchAuxiliaryData]);
 
-  // 4. Dynamically Load Leaflet CDN
+  // 4. Dynamically Load MapLibre CDN
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (window.L) {
-      mapLoadedRef.current = true;
-      initMap();
+    if (window.maplibregl) {
+      setMapLoaded(true);
       return;
     }
 
-    if (!document.getElementById('leaflet-cdn-css')) {
+    if (!document.getElementById('maplibre-css')) {
       const link = document.createElement('link');
-      link.id = 'leaflet-cdn-css';
+      link.id = 'maplibre-css';
       link.rel = 'stylesheet';
-      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+      link.href = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.css';
       document.head.appendChild(link);
     }
 
-    if (!document.getElementById('leaflet-cdn-js')) {
+    if (!document.getElementById('maplibre-js')) {
       const script = document.createElement('script');
-      script.id = 'leaflet-cdn-js';
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      script.id = 'maplibre-js';
+      script.src = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.js';
       script.async = true;
       script.onload = () => {
-        mapLoadedRef.current = true;
-        initMap();
+        setMapLoaded(true);
       };
-      document.body.appendChild(script);
-    }
-
-    function initMap() {
-      if (!mapRef.current || leafletMapRef.current) return;
-      const L = window.L;
-
-      const map = L.map(mapRef.current).setView([23.2599, 77.4126], 12);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        maxZoom: 18
-      }).addTo(map);
-
-      leafletMapRef.current = map;
-      renderHeatAndMarkers(heatmapData, pharmaciesList);
+      document.head.appendChild(script);
     }
   }, []);
 
-  // 5. Render Heatmap and Pharmacy Markers on Leaflet Map
-  const renderHeatAndMarkers = useCallback((heatPoints: HeatmapPoint[], pharms: PharmacyOption[]) => {
-    if (!leafletMapRef.current || !window.L) return;
-    const L = window.L;
-    const map = leafletMapRef.current;
+  // 5. Initialize MapLibre Vector Map
+  useEffect(() => {
+    if (!mapLoaded || !window.maplibregl || !mapRef.current) return;
 
-    // Clear old heat/circle layers
-    heatLayerRef.current.forEach((layer) => map.removeLayer(layer));
-    heatLayerRef.current = [];
+    if (!mapInstanceRef.current) {
+      const map = new window.maplibregl.Map({
+        container: mapRef.current,
+        style: 'https://tiles.openfreemap.org/styles/liberty',
+        center: [76.75, 23.05],
+        zoom: 9,
+        minZoom: 8,
+        maxBounds: [
+          [75.60, 22.60],
+          [77.65, 23.50]
+        ]
+      });
 
-    // Cluster nearby failure points (within 500m / ~0.0045 deg)
-    const clusters: { lat: number; lng: number; count: number; medicines: Set<string> }[] = [];
+      map.addControl(new window.maplibregl.NavigationControl(), 'top-right');
 
-    heatPoints.forEach((pt) => {
-      let merged = false;
-      for (const cl of clusters) {
-        const dLat = Math.abs(cl.lat - pt.lat);
-        const dLng = Math.abs(cl.lng - pt.lng);
-        if (dLat < 0.005 && dLng < 0.005) {
-          cl.count += 1;
-          cl.medicines.add(pt.medicine_name);
-          merged = true;
-          break;
-        }
-      }
-      if (!merged) {
-        clusters.push({
-          lat: pt.lat,
-          lng: pt.lng,
-          count: 1,
-          medicines: new Set([pt.medicine_name])
+      map.on('load', () => {
+        // Add native MapLibre Heatmap source & layer
+        map.addSource('failures', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: heatmapData.map((f) => ({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [f.lng, f.lat] },
+              properties: { medicine: f.medicine_name, weight: 1 }
+            }))
+          }
         });
-      }
-    });
 
-    // Render Red Cluster Circles
-    clusters.forEach((cl) => {
-      const radius = Math.min(800 + cl.count * 150, 2500);
-      const opacity = Math.min(0.25 + cl.count * 0.1, 0.7);
+        map.addLayer({
+          id: 'failures-heat',
+          type: 'heatmap',
+          source: 'failures',
+          paint: {
+            'heatmap-weight': 1,
+            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 3],
+            'heatmap-color': [
+              'interpolate',
+              ['linear'],
+              ['heatmap-density'],
+              0,
+              'rgba(33,102,172,0)',
+              0.2,
+              'rgb(103,169,207)',
+              0.4,
+              'rgb(254,204,92)',
+              0.6,
+              'rgb(253,141,60)',
+              0.8,
+              'rgb(240,59,32)',
+              1,
+              'rgb(189,0,38)'
+            ],
+            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 20, 14, 40],
+            'heatmap-opacity': 0.85
+          }
+        });
 
-      const circle = L.circle([cl.lat, cl.lng], {
-        radius: radius,
-        color: '#ef4444',
-        weight: 1,
-        fillColor: '#ef4444',
-        fillOpacity: opacity
-      }).addTo(map);
+        // Add Fixed City Labels
+        CORRIDOR_CITIES.forEach((city) => {
+          const el = document.createElement('div');
+          el.innerHTML = city.name;
+          el.style.cssText =
+            'font-size:11px;font-weight:700;color:#0f172a;background:rgba(255,255,255,0.9);padding:2px 6px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.3);pointer-events:none;';
+          new window.maplibregl.Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([city.lng, city.lat])
+            .addTo(map);
+        });
+      });
 
-      circle.bindPopup(
-        `<div style="color:#111; font-size:12px;"><b>🚨 Shortage Cluster</b><br/>Failures: ${cl.count}<br/>Medicines: ${Array.from(cl.medicines).join(', ')}</div>`
-      );
+      mapInstanceRef.current = map;
+    }
+  }, [mapLoaded, heatmapData]);
 
-      heatLayerRef.current.push(circle);
-    });
+  // 6. Update Heatmap Data Dynamically
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
 
-    // Render Pharmacy Markers
-    pharms.forEach((ph) => {
+    const source = map.getSource('failures');
+    if (source) {
+      source.setData({
+        type: 'FeatureCollection',
+        features: heatmapData.map((f) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [f.lng, f.lat] },
+          properties: { medicine: f.medicine_name, weight: 1 }
+        }))
+      });
+    }
+  }, [heatmapData]);
+
+  // 7. Update Pharmacy Markers
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.maplibregl) return;
+    const map = mapInstanceRef.current;
+
+    pharmacyMarkersRef.current.forEach((m) => m.remove());
+    pharmacyMarkersRef.current = [];
+
+    pharmaciesList.forEach((ph) => {
       if (ph.lat && ph.lng) {
-        let color = '#22c55e'; // default available
-        if (ph.type === 'PHC' || ph.type === 'janaushadhi') {
-          color = '#38bdf8'; // blue for govt
+        let color = '#16a34a'; // green
+        if (ph.type === 'PHC' || ph.type === 'CHC') {
+          color = '#3b82f6'; // blue
+        } else if (ph.type === 'janaushadhi') {
+          color = '#0d9488'; // teal
+        } else if (ph.type === 'district_hospital' || ph.type === 'hospital') {
+          color = '#7c3aed'; // purple
         }
 
-        const marker = L.circleMarker([ph.lat, ph.lng], {
-          radius: 6,
-          fillColor: color,
-          color: '#ffffff',
-          weight: 1.5,
-          opacity: 0.9,
-          fillOpacity: 0.8
-        }).addTo(map);
+        const el = document.createElement('div');
+        el.style.cssText = `width:10px;height:10px;border-radius:50%;background:${color};border:1.5px solid #fff;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.4);`;
 
-        marker.bindPopup(
-          `<div style="color:#111; font-size:12px;"><b>${ph.name}</b><br/>${ph.area || ph.city}<br/>Type: ${ph.type}</div>`
+        const popup = new window.maplibregl.Popup({ offset: 6, closeButton: false }).setHTML(
+          `<div style="color:#0f172a;font-size:11px;"><b>${ph.name}</b><br/>${ph.area || ph.city} • ${ph.type}</div>`
         );
 
-        heatLayerRef.current.push(marker);
+        const marker = new window.maplibregl.Marker({ element: el })
+          .setLngLat([ph.lng, ph.lat])
+          .setPopup(popup)
+          .addTo(map);
+
+        pharmacyMarkersRef.current.push(marker);
       }
     });
+  }, [pharmaciesList]);
+
+  // Cleanup Map on unmount
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
   }, []);
 
+  // 8. Supabase Realtime Subscriptions
   useEffect(() => {
-    if (mapLoadedRef.current && leafletMapRef.current) {
-      renderHeatAndMarkers(heatmapData, pharmaciesList);
-    }
-  }, [heatmapData, pharmaciesList, renderHeatAndMarkers]);
-
-  // 6. Supabase Realtime Subscriptions
-  useEffect(() => {
-    // Subscribe to stock updates
     const stockChannel = supabase
       .channel('dashboard-stock')
       .on(
@@ -333,7 +376,6 @@ export default function DashboardPage() {
       )
       .subscribe();
 
-    // Subscribe to searches updates for live feed & map
     const searchChannel = supabase
       .channel('dashboard-searches')
       .on(
@@ -344,22 +386,14 @@ export default function DashboardPage() {
             setLiveFeed((prev) => [payload.new as SearchFeedItem, ...prev.slice(0, 14)]);
             setTotalFailures((prev) => prev + 1);
 
-            // Add real-time failure circle to Leaflet map
-            if (leafletMapRef.current && window.L && payload.new.lat && payload.new.lng) {
-              const L = window.L;
-              const newCircle = L.circle([payload.new.lat, payload.new.lng], {
-                radius: 1000,
-                color: '#f87171',
-                weight: 2,
-                fillColor: '#ef4444',
-                fillOpacity: 0.6
-              }).addTo(leafletMapRef.current);
-
-              newCircle.bindPopup(
-                `<div style="color:#111; font-size:12px;"><b>⚡ LIVE SHORTAGE</b><br/>${payload.new.medicine_name}</div>`
-              );
-              heatLayerRef.current.push(newCircle);
-            }
+            setHeatmapData((prev) => [
+              ...prev,
+              {
+                lat: payload.new.lat,
+                lng: payload.new.lng,
+                medicine_name: payload.new.medicine_name
+              }
+            ]);
           }
         }
       )
@@ -371,7 +405,7 @@ export default function DashboardPage() {
     };
   }, [fetchRadarData]);
 
-  // 7. Handle Pharmacist Simulation Action
+  // 9. Handle Pharmacist Simulation Action
   const handleSimulate = async () => {
     setSimulateLoading(true);
     setSimulateResult(null);
@@ -398,7 +432,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 8. Handle Send SMS Alert to Distributor
+  // 10. Handle Send SMS Alert to Distributor
   const handleSendAlertSMS = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!alertPhone.trim() || !insight) return;
@@ -429,7 +463,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 9. Handle Pharmacy Approval
+  // 11. Handle Pharmacy Approval
   const handleApprovePharmacy = async (id: string) => {
     try {
       const { error } = await supabase
@@ -446,7 +480,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Helper to format minute count from timestamp
   const formatInsightTimeAgo = (isoString: string) => {
     if (!isoString) return '1';
     const min = Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60));
@@ -466,7 +499,7 @@ export default function DashboardPage() {
                 LIVE
               </span>
             </div>
-            <p className="text-xs text-gray-400">Bhopal District · Coordination & Surveillance</p>
+            <p className="text-xs text-gray-400">Bhopal–Indore NH-46 Corridor · Live Surveillance</p>
           </div>
         </div>
 
@@ -504,12 +537,12 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-bold text-gray-200 flex items-center space-x-2">
                 <span>📍</span>
-                <span>District Shortage Heatmap (Bhopal)</span>
+                <span>District Vector Shortage Heatmap (MapLibre GL)</span>
               </h2>
               <div className="flex items-center space-x-3 text-xs text-gray-400">
                 <span className="flex items-center space-x-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-                  <span>Shortage</span>
+                  <span>Heatmap</span>
                 </span>
                 <span className="flex items-center space-x-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>
@@ -552,7 +585,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between px-3 py-2 bg-gray-950/70 border border-gray-800/80 rounded-lg text-xs transition duration-300 hover:border-gray-700"
+                      className="flex items-center justify-between px-3 py-2 bg-gray-950/70 border border-gray-800/80 rounded-lg text-xs transition duration-300 hover:border-gray-700 slide-in"
                     >
                       <div className="flex items-center space-x-2">
                         <span className="font-mono text-gray-500">{timeStr}</span>
@@ -697,7 +730,7 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Simulator Modal / Panel */}
+      {/* Simulator Modal */}
       {showSimulateModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-gray-900 border border-gray-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
