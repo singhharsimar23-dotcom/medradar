@@ -58,6 +58,7 @@ interface InteractionLog {
   medicine: string;
   action: string;
   status: 'VERIFIED' | 'RESTOCKED' | 'QUEUED' | 'UNFULFILLED';
+  flaggedToCoordinator?: boolean;
 }
 
 interface PendingPharmacy {
@@ -79,73 +80,57 @@ const CORRIDOR_CITIES = [
 ];
 
 const INITIAL_CORRIDOR_FEED: SearchFeedItem[] = [
+  { id: 'f-0', medicine_name: 'Albumin 20%', lat: 23.2003, lng: 77.0857, area: 'Sehore District', zoneType: 'Rural', is_urgent: true, created_at: new Date().toISOString() },
   { id: 'f-1', medicine_name: 'Insulin Regular', lat: 23.2845, lng: 77.4023, area: 'Karond Chowk, Bhopal', zoneType: 'Semi-Urban', is_urgent: true, created_at: new Date(Date.now() - 2 * 60000).toISOString() },
   { id: 'f-2', medicine_name: 'Salbutamol Inhaler 100mcg', lat: 23.2003, lng: 77.0857, area: 'Sehore Mandi Hub', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 6 * 60000).toISOString() },
   { id: 'f-3', medicine_name: 'Metformin 500mg', lat: 23.2656, lng: 77.4201, area: 'Hamidia Road, Old Bhopal', zoneType: 'Urban', is_urgent: false, created_at: new Date(Date.now() - 14 * 60000).toISOString() },
-  { id: 'f-4', medicine_name: 'Azithromycin 500mg', lat: 23.0186, lng: 76.7206, area: 'Ashta Bus Terminal', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 22 * 60000).toISOString() },
-  { id: 'f-5', medicine_name: 'Insulin Regular', lat: 22.9623, lng: 76.0511, area: 'Dewas Gate Sector', zoneType: 'Urban', is_urgent: true, created_at: new Date(Date.now() - 35 * 60000).toISOString() }
+  { id: 'f-4', medicine_name: 'Azithromycin 500mg', lat: 23.0186, lng: 76.7206, area: 'Ashta Bus Terminal', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 22 * 60000).toISOString() }
 ];
 
 const INITIAL_INTERACTIONS: InteractionLog[] = [
   {
+    id: 'int-0',
+    timestamp: new Date().toISOString(),
+    role: 'PATIENT',
+    actor: 'Patient (WhatsApp)',
+    location: 'Sehore',
+    medicine: 'Albumin 20%',
+    action: 'Critical Deficit Flagged → 0 Stock in District Network (Flagged to Coordinator)',
+    status: 'UNFULFILLED',
+    flaggedToCoordinator: true
+  },
+  {
     id: 'int-1',
-    timestamp: new Date(Date.now() - 1 * 60000).toISOString(),
+    timestamp: new Date(Date.now() - 2 * 60000).toISOString(),
     role: 'PHARMACIST',
     actor: 'Sharma Medical Karond',
     location: 'Karond Chowk, Bhopal',
     medicine: 'Insulin Regular',
-    action: 'WhatsApp Stock Update → 40 Vials IN STOCK (3 Patients SMS Notified)',
-    status: 'RESTOCKED'
+    action: 'Stock Update via WhatsApp → 40 Vials Available (3 Patients SMS Notified)',
+    status: 'RESTOCKED',
+    flaggedToCoordinator: false
   },
   {
     id: 'int-2',
-    timestamp: new Date(Date.now() - 4 * 60000).toISOString(),
+    timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
     role: 'DISTRIBUTOR',
     actor: 'Govindpura C&F Depot',
     location: 'Industrial Area, Bhopal',
     medicine: 'Metformin 500mg & Insulin',
     action: 'Emergency Buffer Dispatched along NH-46 to Sehore CHC',
-    status: 'VERIFIED'
+    status: 'VERIFIED',
+    flaggedToCoordinator: false
   },
   {
     id: 'int-3',
-    timestamp: new Date(Date.now() - 9 * 60000).toISOString(),
+    timestamp: new Date(Date.now() - 10 * 60000).toISOString(),
     role: 'PATIENT',
     actor: 'Patient (+91 98260•••••)',
     location: 'Vijay Nagar, Indore',
     medicine: 'Metformin 500mg',
     action: 'Location Search Completed → 2 Jan Aushadhi Matches Returned',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'int-4',
-    timestamp: new Date(Date.now() - 16 * 60000).toISOString(),
-    role: 'ASHA',
-    actor: 'Sunita Devi (ASHA Sector 4)',
-    location: 'Ichhawar Rural Zone, Sehore',
-    medicine: 'Salbutamol 100mcg Inhaler',
-    action: 'Batch Waitlist Registered for 3 Chronic Asthma Patients',
-    status: 'QUEUED'
-  },
-  {
-    id: 'int-5',
-    timestamp: new Date(Date.now() - 25 * 60000).toISOString(),
-    role: 'PATIENT',
-    actor: 'Patient (+91 94250•••••)',
-    location: 'Ashta Bus Stand',
-    medicine: 'Azithromycin 500mg',
-    action: 'Search Deficit Logged → 0 Retail Stock within 15km',
-    status: 'UNFULFILLED'
-  },
-  {
-    id: 'int-6',
-    timestamp: new Date(Date.now() - 42 * 60000).toISOString(),
-    role: 'PHARMACIST',
-    actor: 'PMBJP Kendra Palasia',
-    location: 'Old Palasia, Indore',
-    medicine: 'Metformin 500mg',
-    action: 'Generic Stock Verified via WhatsApp Scan → 500 Strips @ ₹12',
-    status: 'RESTOCKED'
+    status: 'VERIFIED',
+    flaggedToCoordinator: false
   }
 ];
 
@@ -171,8 +156,8 @@ export default function DashboardPage() {
 
   // Simulation Modal State
   const [showSimulateModal, setShowSimulateModal] = useState(false);
-  const [selectedSimulateArea, setSelectedSimulateArea] = useState('Karond');
-  const [selectedSimulateMed, setSelectedSimulateMed] = useState('Insulin Regular');
+  const [selectedSimulateArea, setSelectedSimulateArea] = useState('Sehore');
+  const [selectedSimulateMed, setSelectedSimulateMed] = useState('Albumin 20%');
   const [simulateResult, setSimulateResult] = useState<string | null>(null);
   const [simulateLoading, setSimulateLoading] = useState(false);
 
@@ -181,6 +166,7 @@ export default function DashboardPage() {
   const [alertPhone, setAlertPhone] = useState('');
   const [alertSending, setAlertSending] = useState(false);
   const [alertSentStatus, setAlertSentStatus] = useState<string | null>(null);
+  const [alertCustomMsg, setAlertCustomMsg] = useState<string>('');
 
   const [secondsAgo, setSecondsAgo] = useState(0);
 
@@ -215,14 +201,22 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 2. Fetch Auxiliary Records & Interactions
-  const fetchAuxiliaryData = useCallback(async () => {
+  // 2. Fetch Interactions and Aux Records
+  const fetchInteractionsData = useCallback(async () => {
     try {
       const intRes = await fetch('/api/interactions');
       const intData = await intRes.json();
-      if (intData.interactions) {
+      if (intData.interactions && intData.interactions.length > 0) {
         setInteractions(intData.interactions);
       }
+    } catch (e) {
+      console.warn('Interactions fetch error:', e);
+    }
+  }, []);
+
+  const fetchAuxiliaryData = useCallback(async () => {
+    try {
+      await fetchInteractionsData();
 
       const { data: pendingData } = await supabase
         .from('pharmacies')
@@ -241,27 +235,64 @@ export default function DashboardPage() {
     } catch (err) {
       console.error('Auxiliary records error:', err);
     }
-  }, []);
+  }, [fetchInteractionsData]);
 
-  // 3. Initial Load, 30s Refresh & 15s Interactions Refresh
+  // 3. Initial Load, 30s Radar Refresh & 5s Fast Interactions Polling
   useEffect(() => {
     fetchRadarData();
     fetchAuxiliaryData();
 
     const radarInterval = setInterval(() => {
       fetchRadarData();
-      fetchAuxiliaryData();
     }, 30000);
+
+    const intInterval = setInterval(() => {
+      fetchInteractionsData();
+    }, 4000);
 
     const timer = setInterval(() => {
       setSecondsAgo((prev) => prev + 1);
     }, 1000);
 
+    // Supabase Realtime Subscription for instant search additions
+    const channel = supabase
+      .channel('dashboard-live-searches')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'searches' },
+        (payload: any) => {
+          if (payload.new) {
+            const isDeficit = payload.new.result_count === 0;
+            const newLog: InteractionLog = {
+              id: payload.new.id || `live-${Date.now()}`,
+              timestamp: payload.new.created_at || new Date().toISOString(),
+              role: 'PATIENT',
+              actor: 'Patient (WhatsApp)',
+              location: payload.new.city || 'Bhopal',
+              medicine: payload.new.medicine_name,
+              action: isDeficit
+                ? `Critical Deficit Flagged → 0 Stock in ${payload.new.city || 'District'} (Flagged to Coordinator)`
+                : `Search Completed → Found ${payload.new.result_count} active facilities nearby`,
+              status: isDeficit ? 'UNFULFILLED' : 'VERIFIED',
+              flaggedToCoordinator: isDeficit
+            };
+
+            setInteractions((prev) => [newLog, ...prev.slice(0, 19)]);
+            if (isDeficit) {
+              setTotalFailures((prev) => prev + 1);
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       clearInterval(radarInterval);
+      clearInterval(intInterval);
       clearInterval(timer);
+      supabase.removeChannel(channel);
     };
-  }, [fetchRadarData, fetchAuxiliaryData]);
+  }, [fetchRadarData, fetchAuxiliaryData, fetchInteractionsData]);
 
   // 4. Dynamically Load Leaflet CDN
   useEffect(() => {
@@ -412,12 +443,19 @@ export default function DashboardPage() {
     }
   };
 
+  const handleQuickDispatch = (item: InteractionLog) => {
+    setAlertCustomMsg(`URGENT: ${item.medicine} deficit reported in ${item.location}. Dispatch buffer stock from Central Warehouse.`);
+    setShowAlertModal(true);
+  };
+
   const handleSendAlertSMS = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!alertPhone.trim() || !insight) return;
+    if (!alertPhone.trim()) return;
 
     setAlertSending(true);
     setAlertSentStatus(null);
+
+    const messageToSend = alertCustomMsg || insight;
 
     try {
       const res = await fetch('/api/alert', {
@@ -425,7 +463,7 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: alertPhone.trim(),
-          message: insight
+          message: messageToSend
         })
       });
 
@@ -437,6 +475,7 @@ export default function DashboardPage() {
           setShowAlertModal(false);
           setAlertSentStatus(null);
           setAlertPhone('');
+          setAlertCustomMsg('');
         }, 3000);
       } else {
         setAlertSentStatus('Transmission queued for delivery.');
@@ -466,8 +505,9 @@ export default function DashboardPage() {
 
   const formatTimeAgo = (isoString: string) => {
     if (!isoString) return 'Just now';
-    const min = Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60));
-    if (min <= 1) return 'Just now';
+    const diffSec = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diffSec < 45) return 'Just now';
+    const min = Math.floor(diffSec / 60);
     if (min < 60) return `${min}m ago`;
     return `${Math.floor(min / 60)}h ago`;
   };
@@ -511,7 +551,10 @@ export default function DashboardPage() {
           </button>
 
           <button
-            onClick={() => setShowAlertModal(true)}
+            onClick={() => {
+              setAlertCustomMsg('');
+              setShowAlertModal(true);
+            }}
             className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition shadow-sm active:scale-95"
           >
             Dispatch Stockist Advisory
@@ -641,7 +684,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 2: NEW! Real-Time Stakeholder Communications & Dispatch Audit Feed (Directly above Advisory) */}
+        {/* Row 2: Live Stakeholder Communications & Dispatch Audit Feed */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
@@ -681,10 +724,10 @@ export default function DashboardPage() {
           </div>
 
           <div className="divide-y divide-slate-800/70 overflow-hidden">
-            {filteredInteractions.slice(0, 6).map((item) => (
+            {filteredInteractions.slice(0, 8).map((item) => (
               <div key={item.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-slate-950/40 px-2 rounded-md transition">
                 <div className="flex items-start space-x-3">
-                  <span className="font-mono text-slate-500 text-[11px] whitespace-nowrap pt-0.5">
+                  <span className="font-mono text-slate-400 text-[11px] whitespace-nowrap pt-0.5">
                     {formatTimeAgo(item.timestamp)}
                   </span>
                   <div>
@@ -702,7 +745,13 @@ export default function DashboardPage() {
                       </span>
                       <span className="font-semibold text-slate-100">{item.actor}</span>
                       <span className="text-slate-500">·</span>
-                      <span className="text-slate-400">{item.location}</span>
+                      <span className="text-slate-300 font-medium">{item.location}</span>
+
+                      {item.flaggedToCoordinator && (
+                        <span className="px-1.5 py-0.2 bg-red-950/80 text-red-400 border border-red-800/80 rounded text-[9px] font-bold">
+                          FLAGGED TO COORDINATOR
+                        </span>
+                      )}
                     </div>
                     <p className="text-slate-300 mt-1">
                       <span className="font-medium text-white">{item.medicine}:</span> {item.action}
@@ -711,6 +760,14 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex items-center space-x-2 self-start md:self-center">
+                  {item.status === 'UNFULFILLED' && (
+                    <button
+                      onClick={() => handleQuickDispatch(item)}
+                      className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-medium text-[10px] rounded transition shadow-sm active:scale-95"
+                    >
+                      Dispatch Buffer
+                    </button>
+                  )}
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                     item.status === 'RESTOCKED'
                       ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
@@ -741,7 +798,10 @@ export default function DashboardPage() {
             </div>
 
             <button
-              onClick={() => setShowAlertModal(true)}
+              onClick={() => {
+                setAlertCustomMsg('');
+                setShowAlertModal(true);
+              }}
               className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-md text-xs font-medium transition"
             >
               Transmit Advisory via SMS
@@ -1014,6 +1074,7 @@ export default function DashboardPage() {
                   onChange={(e) => setSelectedSimulateMed(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-md text-xs text-white focus:outline-none focus:border-red-600"
                 >
+                  <option value="Albumin 20%">Albumin 20%</option>
                   <option value="Insulin Regular">Insulin Regular</option>
                   <option value="Metformin 500mg">Metformin 500mg</option>
                   <option value="Azithromycin 500mg">Azithromycin 500mg</option>
@@ -1076,8 +1137,8 @@ export default function DashboardPage() {
               </div>
 
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-md text-xs text-slate-300 max-h-32 overflow-y-auto whitespace-pre-line">
-                <span className="text-slate-500 font-semibold block mb-1">Advisory Payload Preview:</span>
-                {insight}
+                <span className="text-slate-500 font-semibold block mb-1">Advisory Payload:</span>
+                {alertCustomMsg || insight}
               </div>
 
               {alertSentStatus && (
