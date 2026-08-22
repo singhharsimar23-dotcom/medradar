@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 declare global {
   interface Window {
-    maplibregl: any;
+    L: any;
   }
 }
 
@@ -61,7 +61,7 @@ export default function PatientPage() {
   const [nearestPHC, setNearestPHC] = useState<NearestPHC | null>(null);
 
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const leafletMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
 
   // 1. Request User Location
@@ -76,8 +76,8 @@ export default function PatientPage() {
           setUserLng(lng);
           setLocationGranted(true);
 
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.flyTo({ center: [lng, lat], zoom: 13 });
+          if (leafletMapRef.current) {
+            leafletMapRef.current.setView([lat, lng], 13);
           }
         },
         (err) => {
@@ -96,34 +96,32 @@ export default function PatientPage() {
     requestLocation();
   }, [requestLocation]);
 
-  // 2. Dynamically Load MapLibre GL JS via CDN
+  // 2. Dynamically Load Leaflet via CDN
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (window.maplibregl) {
+    if (window.L) {
       setMapLoaded(true);
       return;
     }
 
-    // Inject MapLibre CSS
-    if (!document.getElementById('maplibre-css')) {
+    if (!document.getElementById('leaflet-cdn-css')) {
       const link = document.createElement('link');
-      link.id = 'maplibre-css';
+      link.id = 'leaflet-cdn-css';
       link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.css';
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
       document.head.appendChild(link);
     }
 
-    // Inject MapLibre JS
-    if (!document.getElementById('maplibre-js')) {
+    if (!document.getElementById('leaflet-cdn-js')) {
       const script = document.createElement('script');
-      script.id = 'maplibre-js';
-      script.src = 'https://unpkg.com/maplibre-gl/dist/maplibre-gl.js';
+      script.id = 'leaflet-cdn-js';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
       script.async = true;
       script.onload = () => {
         setMapLoaded(true);
       };
-      document.head.appendChild(script);
+      document.body.appendChild(script);
     }
   }, []);
 
@@ -172,124 +170,93 @@ export default function PatientPage() {
     [locationGranted, userLat, userLng, searchQuery, isUrgent]
   );
 
-  // 4. Initialize & Update MapLibre Map and Vector Markers
+  // 4. Initialize & Update Leaflet Map
   useEffect(() => {
-    if (!mapLoaded || !window.maplibregl || !mapRef.current) {
+    if (!mapLoaded || !window.L || !mapRef.current || userLat === null || userLng === null) {
       return;
     }
 
-    if (!mapInstanceRef.current) {
-      const initialCenter = userLng && userLat ? [userLng, userLat] : [76.75, 23.05];
-      const initialZoom = userLng && userLat ? 13 : 9;
+    const L = window.L;
 
-      const map = new window.maplibregl.Map({
-        container: mapRef.current,
-        style: 'https://tiles.openfreemap.org/styles/liberty',
-        center: initialCenter,
-        zoom: initialZoom,
-        maxBounds: [
-          [75.60, 22.60],
-          [77.65, 23.50]
-        ]
-      });
-
-      mapInstanceRef.current = map;
+    if (!leafletMapRef.current) {
+      const map = L.map(mapRef.current).setView([userLat, userLng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+      }).addTo(map);
+      leafletMapRef.current = map;
     }
 
-    const map = mapInstanceRef.current;
+    const map = leafletMapRef.current;
 
     // Clear old markers
-    markersRef.current.forEach((m) => m.remove());
+    markersRef.current.forEach((m) => map.removeLayer(m));
     markersRef.current = [];
 
-    // Add User Location Marker
-    if (userLat !== null && userLng !== null) {
-      const userEl = document.createElement('div');
-      userEl.style.cssText =
-        'width:14px;height:14px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px #2563eb;cursor:pointer;';
-      const userMarker = new window.maplibregl.Marker({ element: userEl })
-        .setLngLat([userLng, userLat])
-        .setPopup(
-          new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
-            '<strong>Aapki Location</strong>'
-          )
-        )
-        .addTo(map);
-      markersRef.current.push(userMarker);
-    }
+    // Add Blue User Location Marker
+    const userMarker = L.circleMarker([userLat, userLng], {
+      radius: 8,
+      fillColor: '#2563eb',
+      color: '#ffffff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.95
+    })
+      .addTo(map)
+      .bindPopup('<b>Aapki Location</b>');
+    markersRef.current.push(userMarker);
 
-    // Add Pharmacy Markers
-    results.forEach((pharmacy) => {
-      if (pharmacy.lat && pharmacy.lng) {
-        let color = '#16a34a'; // default green
+    const bounds = L.latLngBounds([[userLat, userLng]]);
 
-        if (!pharmacy.is_open) {
-          color = '#dc2626'; // red
-        } else if (pharmacy.type === 'PHC' || pharmacy.type === 'CHC') {
-          color = '#3b82f6'; // blue
-        } else if (pharmacy.type === 'janaushadhi') {
-          color = '#0d9488'; // teal
-        } else if (pharmacy.type === 'district_hospital' || pharmacy.type === 'hospital') {
-          color = '#7c3aed'; // purple
-        }
-
-        const el = document.createElement('div');
-        el.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;`;
-
-        const popup = new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
-          `<strong>${pharmacy.name}</strong><br/>${pharmacy.distance.toFixed(1)}km • ${
-            pharmacy.is_open ? 'Open' : 'Closed'
-          }`
-        );
-
-        const marker = new window.maplibregl.Marker({ element: el })
-          .setLngLat([pharmacy.lng, pharmacy.lat])
-          .setPopup(popup)
-          .addTo(map);
-
+    // Add Green Markers for Result Pharmacies
+    results.forEach((ph) => {
+      if (ph.lat !== null && ph.lng !== null) {
+        const marker = L.circleMarker([ph.lat, ph.lng], {
+          radius: 9,
+          fillColor: ph.is_open ? '#16a34a' : '#dc2626',
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.9
+        })
+          .addTo(map)
+          .bindPopup(
+            `<b>${ph.name}</b><br/>${ph.distance.toFixed(1)} km • ${ph.is_open ? 'Open' : 'Closed'}`
+          );
         markersRef.current.push(marker);
+        bounds.extend([ph.lat, ph.lng]);
       }
     });
 
     // Add Nearest PHC Marker if Present
     if (nearestPHC && nearestPHC.lat && nearestPHC.lng) {
-      const phcEl = document.createElement('div');
-      phcEl.style.cssText =
-        'width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;';
-
-      const phcPopup = new window.maplibregl.Popup({ offset: 8, closeButton: false }).setHTML(
-        `<strong>${nearestPHC.name} (Sarkaari)</strong><br/>${nearestPHC.distance.toFixed(1)}km`
-      );
-
-      const phcMarker = new window.maplibregl.Marker({ element: phcEl })
-        .setLngLat([nearestPHC.lng, nearestPHC.lat])
-        .setPopup(phcPopup)
-        .addTo(map);
-
+      const phcMarker = L.circleMarker([nearestPHC.lat, nearestPHC.lng], {
+        radius: 8,
+        fillColor: '#0284c7',
+        color: '#ffffff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.9
+      })
+        .addTo(map)
+        .bindPopup(`<b>${nearestPHC.name} (Sarkaari)</b><br/>${nearestPHC.distance.toFixed(1)} km`);
       markersRef.current.push(phcMarker);
+      bounds.extend([nearestPHC.lat, nearestPHC.lng]);
     }
 
-    // Zoom to fit results
-    if (results.length > 0) {
-      const bounds = new window.maplibregl.LngLatBounds();
-      results.forEach((r) => {
-        if (r.lng && r.lat) bounds.extend([r.lng, r.lat]);
-      });
-      if (userLng && userLat) {
-        bounds.extend([userLng, userLat]);
-      }
-      map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+    if (results.length > 0 || nearestPHC) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    } else {
+      map.setView([userLat, userLng], 13);
     }
-
-    return () => {};
   }, [mapLoaded, results, nearestPHC, userLat, userLng]);
 
-  // Clean up MapLibre instance on component unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
       }
     };
   }, []);
@@ -356,7 +323,6 @@ export default function PatientPage() {
     }
   };
 
-  // Helper to format updated_at time in minutes
   const formatMinutesAgo = (timestamp: string | null) => {
     if (!timestamp) return 'Recently';
     const diffMin = Math.floor((Date.now() - new Date(timestamp).getTime()) / (1000 * 60));
@@ -368,7 +334,7 @@ export default function PatientPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col font-sans pb-12">
-      {/* Minimal Header */}
+      {/* Header */}
       <header className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-20">
         <div className="flex items-center space-x-2">
           <span className="text-xl leading-none">🔴</span>
@@ -423,7 +389,7 @@ export default function PatientPage() {
           </form>
         </section>
 
-        {/* Location Section (when location not granted) */}
+        {/* Location Section */}
         {!locationGranted && (
           <section className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-col space-y-2">
             <p className="text-sm font-medium text-amber-900">
@@ -439,17 +405,17 @@ export default function PatientPage() {
           </section>
         )}
 
-        {/* Global Error Banner */}
+        {/* Error Banner */}
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg font-medium">
             {error}
           </div>
         )}
 
-        {/* MapLibre GL Map Section (shown after search when results exist) */}
+        {/* Map Section */}
         {results.length > 0 && (
           <section className="rounded-xl overflow-hidden border border-gray-300 shadow-sm">
-            <div id="medradar-map" ref={mapRef} className="w-full h-[250px] bg-gray-100" />
+            <div id="patient-leaflet-map" ref={mapRef} className="w-full h-[250px] bg-gray-100" />
           </section>
         )}
 
@@ -528,7 +494,7 @@ export default function PatientPage() {
               </p>
             </div>
 
-            {/* Sarkaari Option (Nearest PHC / Janaushadhi) */}
+            {/* Sarkaari Option */}
             {nearestPHC && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
                 <p className="font-semibold">
@@ -546,7 +512,7 @@ export default function PatientPage() {
               </div>
             )}
 
-            {/* SMS Waitlist Section */}
+            {/* SMS Waitlist */}
             <div className="pt-2 border-t border-gray-200 flex flex-col space-y-3">
               <p className="text-sm font-semibold text-gray-800">
                 📱 SMS alert chahiye jab stock milega?
