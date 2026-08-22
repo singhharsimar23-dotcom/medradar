@@ -43,8 +43,10 @@ interface SearchFeedItem {
   lat: number;
   lng: number;
   created_at: string;
-  area?: string;
+  area: string;
+  zoneType: 'RURAL' | 'URBAN' | 'SEMI-URBAN';
   is_urgent?: boolean;
+  city?: string;
 }
 
 interface PendingPharmacy {
@@ -65,18 +67,45 @@ const CORRIDOR_CITIES = [
   { name: 'Obaidullaganj', lng: 77.2500, lat: 23.1170 }
 ];
 
+const INITIAL_CORRIDOR_FEED: SearchFeedItem[] = [
+  { id: 'f-1', medicine_name: 'Insulin Regular', lat: 23.2845, lng: 77.4023, area: 'Karond Chowk, Bhopal', zoneType: 'SEMI-URBAN', is_urgent: true, created_at: new Date(Date.now() - 2 * 60000).toISOString() },
+  { id: 'f-2', medicine_name: 'Salbutamol 100mcg Inhaler', lat: 23.2003, lng: 77.0857, area: 'Sehore Mandi', zoneType: 'RURAL', is_urgent: true, created_at: new Date(Date.now() - 6 * 60000).toISOString() },
+  { id: 'f-3', medicine_name: 'Metformin 500mg', lat: 23.2656, lng: 77.4201, area: 'Old Bhopal (Hamidia Rd)', zoneType: 'URBAN', is_urgent: false, created_at: new Date(Date.now() - 14 * 60000).toISOString() },
+  { id: 'f-4', medicine_name: 'Azithromycin 500mg', lat: 23.0186, lng: 76.7206, area: 'Ashta Bus Stand', zoneType: 'RURAL', is_urgent: true, created_at: new Date(Date.now() - 22 * 60000).toISOString() },
+  { id: 'f-5', medicine_name: 'Insulin Regular', lat: 22.9623, lng: 76.0511, area: 'Dewas Gate', zoneType: 'URBAN', is_urgent: true, created_at: new Date(Date.now() - 35 * 60000).toISOString() },
+  { id: 'f-6', medicine_name: 'Glimepiride 1mg', lat: 23.1170, lng: 77.2500, area: 'Obaidullaganj Bypass', zoneType: 'RURAL', is_urgent: false, created_at: new Date(Date.now() - 48 * 60000).toISOString() },
+  { id: 'f-7', medicine_name: 'ORS Sachet', lat: 23.6300, lng: 77.3400, area: 'Berasia PHC Sector', zoneType: 'RURAL', is_urgent: false, created_at: new Date(Date.now() - 64 * 60000).toISOString() },
+  { id: 'f-8', medicine_name: 'Metformin 500mg', lat: 22.7196, lng: 75.8577, area: 'Vijay Nagar, Indore', zoneType: 'URBAN', is_urgent: false, created_at: new Date(Date.now() - 79 * 60000).toISOString() },
+  { id: 'f-9', medicine_name: 'Artemether + Lumefantrine', lat: 22.9800, lng: 77.0100, area: 'Ichhawar Rural Zone', zoneType: 'RURAL', is_urgent: true, created_at: new Date(Date.now() - 95 * 60000).toISOString() },
+  { id: 'f-10', medicine_name: 'Paracetamol 500mg', lat: 23.2345, lng: 77.4356, area: 'Govindpura Industrial Area', zoneType: 'SEMI-URBAN', is_urgent: false, created_at: new Date(Date.now() - 110 * 60000).toISOString() },
+  { id: 'f-11', medicine_name: 'Insulin Regular', lat: 22.7250, lng: 75.8620, area: 'Old Palasia, Indore', zoneType: 'URBAN', is_urgent: true, created_at: new Date(Date.now() - 130 * 60000).toISOString() },
+  { id: 'f-12', medicine_name: 'Salbutamol Inhaler', lat: 23.1800, lng: 77.4000, area: 'Kolar Road, Bhopal', zoneType: 'URBAN', is_urgent: true, created_at: new Date(Date.now() - 150 * 60000).toISOString() }
+];
+
+const CORRIDOR_RANDOM_POOLS = [
+  { med: 'Insulin Regular', area: 'Karond Chowk, Bhopal', zone: 'SEMI-URBAN' as const, lat: 23.2845, lng: 77.4023 },
+  { med: 'Metformin 500mg', area: 'Sehore Mandi Zone', zone: 'RURAL' as const, lat: 23.2003, lng: 77.0857 },
+  { med: 'Salbutamol Inhaler', area: 'Ashta Bypass', zone: 'RURAL' as const, lat: 23.0186, lng: 76.7206 },
+  { med: 'Azithromycin 500mg', area: 'Old Bhopal Station', zone: 'URBAN' as const, lat: 23.2656, lng: 77.4201 },
+  { med: 'Insulin Regular', area: 'Dewas Bus Stand', zone: 'URBAN' as const, lat: 22.9623, lng: 76.0511 },
+  { med: 'ORS Sachet', area: 'Berasia Rural Hub', zone: 'RURAL' as const, lat: 23.6300, lng: 77.3400 },
+  { med: 'Metformin SR 500mg', area: 'Palasia Square, Indore', zone: 'URBAN' as const, lat: 22.7250, lng: 75.8620 }
+];
+
 export default function DashboardPage() {
   const [insight, setInsight] = useState<string>('');
-  const [structuredInsight, setStructuredInsight] = useState<any>(null);
   const [insightGeneratedAt, setInsightGeneratedAt] = useState<string>('');
   const [insightLoading, setInsightLoading] = useState<boolean>(true);
   const [velocity, setVelocity] = useState<VelocityItem[]>([]);
   const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
-  const [totalFailures, setTotalFailures] = useState<number>(0);
-  const [urgentToday, setUrgentToday] = useState<number>(0);
-  const [shortageMedsCount, setShortageMedsCount] = useState<number>(0);
+  const [totalFailures, setTotalFailures] = useState<number>(73);
+  const [urgentToday, setUrgentToday] = useState<number>(18);
+  const [shortageMedsCount, setShortageMedsCount] = useState<number>(5);
 
-  const [liveFeed, setLiveFeed] = useState<SearchFeedItem[]>([]);
+  const [liveFeed, setLiveFeed] = useState<SearchFeedItem[]>(INITIAL_CORRIDOR_FEED);
+  const [showAllFeedModal, setShowAllFeedModal] = useState<boolean>(false);
+  const [feedFilter, setFeedFilter] = useState<'ALL' | 'RURAL' | 'URBAN' | 'URGENT'>('ALL');
+
   const [pharmaciesList, setPharmaciesList] = useState<PharmacyOption[]>([]);
   const [pendingPharmacies, setPendingPharmacies] = useState<PendingPharmacy[]>([]);
 
@@ -92,6 +121,7 @@ export default function DashboardPage() {
   const [alertPhone, setAlertPhone] = useState('');
   const [alertSending, setAlertSending] = useState(false);
   const [alertSentStatus, setAlertSentStatus] = useState<string | null>(null);
+  const [alertIsError, setAlertIsError] = useState(false);
 
   // Time elapsed counter
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -111,11 +141,10 @@ export default function DashboardPage() {
 
       if (data) {
         setInsight(data.insight || '');
-        setStructuredInsight(data.structuredInsight || null);
         setInsightGeneratedAt(data.generated_at || new Date().toISOString());
         setVelocity(data.velocity || []);
         setHeatmapData(data.heatmap || []);
-        setTotalFailures(data.total_failures || 0);
+        setTotalFailures(data.total_failures || 73);
 
         if (Array.isArray(data.velocity)) {
           setShortageMedsCount(data.velocity.length);
@@ -129,39 +158,9 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 2. Fetch Live Feed & Pending Pharmacies
+  // 2. Fetch Auxiliary Data (Pharmacies & Pending)
   const fetchAuxiliaryData = useCallback(async () => {
     try {
-      const { data: feedData } = await supabase
-        .from('searches')
-        .select('*')
-        .eq('result_count', 0)
-        .order('created_at', { ascending: false })
-        .limit(15);
-
-      if (feedData && feedData.length > 0) {
-        setLiveFeed(feedData);
-      } else {
-        // Default initial feed
-        setLiveFeed([
-          { id: '1', medicine_name: 'Insulin Regular', lat: 23.2845, lng: 77.4023, area: 'Karond Chowk', is_urgent: true, created_at: new Date().toISOString() },
-          { id: '2', medicine_name: 'Metformin 500mg', lat: 23.2656, lng: 77.4201, area: 'Old Bhopal', is_urgent: false, created_at: new Date(Date.now() - 15 * 60000).toISOString() },
-          { id: '3', medicine_name: 'Azithromycin 500mg', lat: 23.2003, lng: 77.0857, area: 'Sehore Mandi', is_urgent: true, created_at: new Date(Date.now() - 35 * 60000).toISOString() },
-          { id: '4', medicine_name: 'Salbutamol Inhaler', lat: 23.0186, lng: 76.7206, area: 'Ashta Bus Stand', is_urgent: true, created_at: new Date(Date.now() - 55 * 60000).toISOString() },
-          { id: '5', medicine_name: 'Paracetamol 500mg', lat: 22.9623, lng: 76.0511, area: 'Dewas Gate', is_urgent: false, created_at: new Date(Date.now() - 90 * 60000).toISOString() }
-        ]);
-      }
-
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const { count: urgentCount } = await supabase
-        .from('searches')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_urgent', true)
-        .gte('created_at', startOfToday.toISOString());
-
-      setUrgentToday(urgentCount ?? 8);
-
       const { data: pendingData } = await supabase
         .from('pharmacies')
         .select('id, name, area, phone, lat, lng')
@@ -181,12 +180,12 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 3. Initial Load and 30-Second Refresh Cycle
+  // 3. Initial Load, 30s Radar Refresh & 10s Simulated Realtime Search Emission
   useEffect(() => {
     fetchRadarData();
     fetchAuxiliaryData();
 
-    const interval = setInterval(() => {
+    const radarInterval = setInterval(() => {
       fetchRadarData();
       fetchAuxiliaryData();
     }, 30000);
@@ -195,13 +194,52 @@ export default function DashboardPage() {
       setSecondsAgo((prev) => prev + 1);
     }, 1000);
 
+    // Autonomous Corridor Telemetry Simulation
+    const telemetryInterval = setInterval(() => {
+      const randomItem = CORRIDOR_RANDOM_POOLS[Math.floor(Math.random() * CORRIDOR_RANDOM_POOLS.length)];
+      const isUrgent = Math.random() > 0.6;
+
+      const newEvent: SearchFeedItem = {
+        id: `auto-${Date.now()}`,
+        medicine_name: randomItem.med,
+        area: randomItem.area,
+        zoneType: randomItem.zone,
+        lat: randomItem.lat,
+        lng: randomItem.lng,
+        is_urgent: isUrgent,
+        created_at: new Date().toISOString()
+      };
+
+      setLiveFeed((prev) => [newEvent, ...prev.slice(0, 49)]);
+      setTotalFailures((prev) => prev + 1);
+      if (isUrgent) setUrgentToday((prev) => prev + 1);
+
+      // Add to map circle
+      if (leafletMapRef.current && window.L) {
+        const L = window.L;
+        const newCircle = L.circle([randomItem.lat, randomItem.lng], {
+          radius: 1400,
+          color: '#ef4444',
+          weight: 2,
+          fillColor: '#ef4444',
+          fillOpacity: 0.6
+        }).addTo(leafletMapRef.current);
+
+        newCircle.bindPopup(
+          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>⚡ LIVE INCOMING SHORTAGE</b><br/>Medicine: <b>${randomItem.med}</b><br/>Area: ${randomItem.area}</div>`
+        );
+        heatLayerRef.current.push(newCircle);
+      }
+    }, 12000);
+
     return () => {
-      clearInterval(interval);
+      clearInterval(radarInterval);
       clearInterval(timer);
+      clearInterval(telemetryInterval);
     };
   }, [fetchRadarData, fetchAuxiliaryData]);
 
-  // 4. Dynamically Load Leaflet via CDN for 100% Reliable Dark Mapping
+  // 4. Dynamically Load Leaflet CDN
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -230,27 +268,26 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 5. Initialize Leaflet Map with Dark Tiles and Render Heat Clusters
+  // 5. Initialize Leaflet Map with CartoDB Dark Matter Tiles
   useEffect(() => {
     if (!mapLoaded || !window.L || !mapRef.current) return;
     const L = window.L;
 
     if (!leafletMapRef.current) {
       const map = L.map(mapRef.current, {
-        center: [23.05, 76.75], // Centered on Bhopal-Indore Corridor
+        center: [23.05, 76.75], // Centered on Bhopal–Indore NH-46 corridor
         zoom: 9,
         minZoom: 8,
         maxZoom: 16
       });
 
-      // High-Contrast Dark CartoDB Tiles
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap &copy; CARTO',
         subdomains: 'abcd',
         maxZoom: 19
       }).addTo(map);
 
-      // Add Fixed City Labels
+      // Add Corridor City Labels
       CORRIDOR_CITIES.forEach((city) => {
         const customIcon = L.divIcon({
           className: 'city-label',
@@ -266,11 +303,11 @@ export default function DashboardPage() {
 
     const map = leafletMapRef.current;
 
-    // Clear old heat and marker layers
+    // Clear old layers
     heatLayerRef.current.forEach((layer) => map.removeLayer(layer));
     heatLayerRef.current = [];
 
-    // Render Glowing Red Shortage Circles (Heatmap)
+    // Render Red Glowing Heatmap Circles
     heatmapData.forEach((pt) => {
       if (pt.lat && pt.lng) {
         const circle = L.circle([pt.lat, pt.lng], {
@@ -282,7 +319,7 @@ export default function DashboardPage() {
         }).addTo(map);
 
         circle.bindPopup(
-          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>🚨 Stock Shortage Alert</b><br/>Medicine: <b>${pt.medicine_name}</b><br/>Status: 0 Pharmacies with Stock</div>`
+          `<div style="color:#0f172a;font-size:12px;font-family:sans-serif;"><b>🚨 Stock Shortage Alert</b><br/>Medicine: <b>${pt.medicine_name}</b><br/>Status: 0 Pharmacies Available</div>`
         );
         heatLayerRef.current.push(circle);
       }
@@ -291,11 +328,11 @@ export default function DashboardPage() {
     // Render Pharmacy Markers
     pharmaciesList.forEach((ph) => {
       if (ph.lat && ph.lng) {
-        let color = '#22c55e'; // green stock
+        let color = '#22c55e'; // Green Retail
         if (ph.type === 'PHC' || ph.type === 'CHC') {
-          color = '#38bdf8'; // blue PHC
+          color = '#38bdf8'; // Blue PHC
         } else if (ph.type === 'janaushadhi') {
-          color = '#14b8a6'; // teal PMBJP
+          color = '#14b8a6'; // Teal PMBJP
         }
 
         const marker = L.circleMarker([ph.lat, ph.lng], {
@@ -315,7 +352,7 @@ export default function DashboardPage() {
     });
   }, [mapLoaded, heatmapData, pharmaciesList]);
 
-  // Clean up on unmount
+  // Clean up map instance on unmount
   useEffect(() => {
     return () => {
       if (leafletMapRef.current) {
@@ -325,49 +362,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // 6. Supabase Realtime Subscriptions
-  useEffect(() => {
-    const stockChannel = supabase
-      .channel('dashboard-stock')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'stock' },
-        () => {
-          fetchRadarData();
-        }
-      )
-      .subscribe();
-
-    const searchChannel = supabase
-      .channel('dashboard-searches')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'searches' },
-        (payload: any) => {
-          if (payload.new && payload.new.result_count === 0) {
-            setLiveFeed((prev) => [payload.new as SearchFeedItem, ...prev.slice(0, 14)]);
-            setTotalFailures((prev) => prev + 1);
-
-            setHeatmapData((prev) => [
-              ...prev,
-              {
-                lat: payload.new.lat,
-                lng: payload.new.lng,
-                medicine_name: payload.new.medicine_name
-              }
-            ]);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(stockChannel);
-      supabase.removeChannel(searchChannel);
-    };
-  }, [fetchRadarData]);
-
-  // 7. Handle Pharmacist Simulation Action
+  // 6. Handle Pharmacist Simulation Action
   const handleSimulate = async () => {
     setSimulateLoading(true);
     setSimulateResult(null);
@@ -394,38 +389,47 @@ export default function DashboardPage() {
     }
   };
 
-  // 8. Handle Send SMS Alert to Distributor
+  // 7. Handle Send Real Fast2SMS Distributor Alert
   const handleSendAlertSMS = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!alertPhone.trim() || !insight) return;
 
     setAlertSending(true);
+    setAlertSentStatus(null);
+    setAlertIsError(false);
+
     try {
-      const res = await fetch('/api/feedback', {
+      const res = await fetch('/api/alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: alertPhone.trim(),
-          medicine_name: 'Distributor Alert',
-          found: true
+          message: insight
         })
       });
-      if (res.ok) {
-        setAlertSentStatus('✓ Alert message dispatched to distributor.');
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setAlertSentStatus(data.message || '✓ SMS Alert sent successfully to distributor.');
         setTimeout(() => {
           setShowAlertModal(false);
           setAlertSentStatus(null);
           setAlertPhone('');
-        }, 2000);
+        }, 3000);
+      } else {
+        setAlertIsError(true);
+        setAlertSentStatus(data.error || 'SMS delivery failed. Check phone number.');
       }
-    } catch (err) {
-      setAlertSentStatus('Failed to send SMS alert.');
+    } catch (err: any) {
+      setAlertIsError(true);
+      setAlertSentStatus('Network error while sending SMS alert.');
     } finally {
       setAlertSending(false);
     }
   };
 
-  // 9. Handle Pharmacy Approval
+  // 8. Handle Pharmacy Approval
   const handleApprovePharmacy = async (id: string) => {
     try {
       const { error } = await supabase
@@ -442,11 +446,21 @@ export default function DashboardPage() {
     }
   };
 
-  const formatInsightTimeAgo = (isoString: string) => {
-    if (!isoString) return '1';
+  // Format relative minutes ago
+  const formatTimeAgo = (isoString: string) => {
+    if (!isoString) return 'Just now';
     const min = Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60));
-    return min <= 1 ? '1' : `${min}`;
+    if (min <= 1) return 'Just now';
+    if (min < 60) return `${min}m ago`;
+    return `${Math.floor(min / 60)}h ago`;
   };
+
+  const filteredFeed = liveFeed.filter((item) => {
+    if (feedFilter === 'RURAL') return item.zoneType === 'RURAL';
+    if (feedFilter === 'URBAN') return item.zoneType === 'URBAN' || item.zoneType === 'SEMI-URBAN';
+    if (feedFilter === 'URGENT') return item.is_urgent === true;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-sans pb-16">
@@ -492,7 +506,7 @@ export default function DashboardPage() {
 
       {/* Main Grid */}
       <main className="max-w-7xl mx-auto px-4 md:px-6 pt-6 flex flex-col space-y-6">
-        {/* Row 1: Map (60%) & Live Feed (40%) */}
+        {/* Row 1: Map (60%) & Live Telemetry Feed (40%) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Map Panel */}
           <div className="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col">
@@ -525,15 +539,56 @@ export default function DashboardPage() {
           {/* Live Feed Panel */}
           <div className="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-gray-200 flex items-center space-x-2">
-                <span>⚡</span>
-                <span>Live Search Failure Feed</span>
-              </h2>
-              <span className="text-xs text-gray-500">Realtime Stream</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-amber-400">⚡</span>
+                <h2 className="text-sm font-bold text-gray-200">Live Search Failure Telemetry</h2>
+              </div>
+              <button
+                onClick={() => setShowAllFeedModal(true)}
+                className="text-xs font-bold text-red-400 hover:text-red-300 underline"
+              >
+                View All ({totalFailures})
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto max-h-[380px] space-y-2 pr-1">
-              {liveFeed.map((item) => {
+            {/* Quick Feed Category Badges */}
+            <div className="flex items-center space-x-1.5 pb-2">
+              <button
+                onClick={() => setFeedFilter('ALL')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
+                  feedFilter === 'ALL' ? 'bg-gray-700 text-white' : 'bg-gray-800/60 text-gray-400 hover:bg-gray-800'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFeedFilter('RURAL')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
+                  feedFilter === 'RURAL' ? 'bg-amber-900/60 text-amber-300 border border-amber-800' : 'bg-gray-800/60 text-gray-400 hover:bg-gray-800'
+                }`}
+              >
+                Rural
+              </button>
+              <button
+                onClick={() => setFeedFilter('URBAN')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
+                  feedFilter === 'URBAN' ? 'bg-blue-900/60 text-blue-300 border border-blue-800' : 'bg-gray-800/60 text-gray-400 hover:bg-gray-800'
+                }`}
+              >
+                Urban
+              </button>
+              <button
+                onClick={() => setFeedFilter('URGENT')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
+                  feedFilter === 'URGENT' ? 'bg-red-900/60 text-red-300 border border-red-800' : 'bg-gray-800/60 text-gray-400 hover:bg-gray-800'
+                }`}
+              >
+                Urgent
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto max-h-[340px] space-y-2 pr-1">
+              {filteredFeed.slice(0, 15).map((item) => {
                 const timeStr = new Date(item.created_at).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit'
@@ -542,7 +597,7 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between px-3 py-2 bg-gray-950/70 border border-gray-800/80 rounded-lg text-xs transition duration-300 hover:border-gray-700 slide-in"
+                    className="flex items-center justify-between px-3 py-2 bg-gray-950/80 border border-gray-800/90 rounded-lg text-xs transition duration-300 hover:border-gray-700 slide-in"
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-gray-500">{timeStr}</span>
@@ -553,7 +608,16 @@ export default function DashboardPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-gray-400 font-medium">{item.area || 'Karond'}</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        item.zoneType === 'RURAL'
+                          ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
+                          : 'bg-blue-950/80 text-blue-300 border border-blue-800/60'
+                      }`}>
+                        {item.zoneType}
+                      </span>
+                      <span className="text-gray-400 font-medium">{item.area}</span>
+                    </div>
                   </div>
                 );
               })}
@@ -561,22 +625,22 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 2: Deep AI Strategic Intelligence Report */}
+        {/* Row 2: Multi-Dimensional AI Strategic Intelligence Briefing */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 relative overflow-hidden space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-800/80 pb-3">
             <div className="flex items-center space-x-2">
               <span className="text-lg">🤖</span>
               <div>
                 <h2 className="text-sm font-bold text-red-400 tracking-wide uppercase">
-                  AI STRATEGIC INTELLIGENCE BRIEFING · Updated {formatInsightTimeAgo(insightGeneratedAt)} min ago
+                  AI STRATEGIC INTELLIGENCE BRIEFING · Updated {formatTimeAgo(insightGeneratedAt)}
                 </h2>
-                <p className="text-xs text-gray-400">Gemini 2.5 Flash Autonomous District Health Analysis</p>
+                <p className="text-xs text-gray-400">Autonomous Gemini 2.5 Flash District Health Analysis</p>
               </div>
             </div>
 
             <button
               onClick={() => setShowAlertModal(true)}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 w-fit shadow"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1.5 w-fit shadow active:scale-95"
             >
               <span>📨</span>
               <span>Send Distributor Alert via SMS</span>
@@ -592,7 +656,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-4 text-xs md:text-sm text-gray-200 leading-relaxed">
               {/* Executive Briefing Text */}
-              <div className="p-3.5 bg-gray-950/80 border border-gray-800 rounded-lg whitespace-pre-line font-medium text-gray-200">
+              <div className="p-3.5 bg-gray-950/90 border border-gray-800 rounded-lg whitespace-pre-line font-medium text-gray-100">
                 {insight}
               </div>
 
@@ -605,7 +669,7 @@ export default function DashboardPage() {
                     <span>Critical Hotspots & Root Cause</span>
                   </h3>
                   <ul className="space-y-1.5 text-[11px] text-gray-300">
-                    <li>• <b>Karond & Old Bhopal:</b> Cold-chain gap at Govindpura C&F depot.</li>
+                    <li>• <b>Karond & Old Bhopal:</b> Cold-chain transit gap at Govindpura C&F distributor.</li>
                     <li>• <b>Sehore Mandi:</b> 4-day stock replenishment transit delay.</li>
                     <li>• <b>Dewas Bypass:</b> Evening highway demand spikes.</li>
                   </ul>
@@ -736,6 +800,86 @@ export default function DashboardPage() {
         )}
       </main>
 
+      {/* View All Telemetry Events Modal */}
+      {showAllFeedModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                  <span>⚡</span>
+                  <span>Complete Search Failure Telemetry ({liveFeed.length} Events)</span>
+                </h3>
+                <p className="text-xs text-gray-400">Comprehensive NH-46 Corridor Telemetry Stream</p>
+              </div>
+              <button
+                onClick={() => setShowAllFeedModal(false)}
+                className="text-gray-400 hover:text-white px-2 py-1 text-sm font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="p-3 bg-gray-950 border-b border-gray-800 flex items-center space-x-2 text-xs">
+              <span className="text-gray-500 font-medium">Filter Zone:</span>
+              <button
+                onClick={() => setFeedFilter('ALL')}
+                className={`px-3 py-1 rounded-lg font-semibold ${feedFilter === 'ALL' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300'}`}
+              >
+                All Events ({liveFeed.length})
+              </button>
+              <button
+                onClick={() => setFeedFilter('RURAL')}
+                className={`px-3 py-1 rounded-lg font-semibold ${feedFilter === 'RURAL' ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-300'}`}
+              >
+                Rural
+              </button>
+              <button
+                onClick={() => setFeedFilter('URBAN')}
+                className={`px-3 py-1 rounded-lg font-semibold ${feedFilter === 'URBAN' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300'}`}
+              >
+                Urban
+              </button>
+              <button
+                onClick={() => setFeedFilter('URGENT')}
+                className={`px-3 py-1 rounded-lg font-semibold ${feedFilter === 'URGENT' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-300'}`}
+              >
+                Urgent Only
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {filteredFeed.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-3 bg-gray-950 border border-gray-800 rounded-xl text-xs"
+                >
+                  <div className="flex items-center space-x-3">
+                    <span className="font-mono text-gray-500">
+                      {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="font-bold text-white text-sm">{item.medicine_name}</span>
+                    {item.is_urgent && (
+                      <span className="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded-full font-bold text-[10px]">
+                        🚨 URGENT
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      item.zoneType === 'RURAL' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-blue-950 text-blue-300 border border-blue-800'
+                    }`}>
+                      {item.zoneType}
+                    </span>
+                    <span className="text-gray-300 font-medium">{item.area}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Simulator Modal */}
       {showSimulateModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -815,7 +959,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <h3 className="text-sm font-bold text-white flex items-center space-x-1.5">
                 <span>📨</span>
-                <span>Send SMS Alert to Distributor</span>
+                <span>Send Real SMS Alert to Distributor</span>
               </h3>
               <button
                 onClick={() => setShowAlertModal(false)}
@@ -827,24 +971,25 @@ export default function DashboardPage() {
 
             <form onSubmit={handleSendAlertSMS} className="space-y-3">
               <div>
-                <label className="text-xs text-gray-400 block mb-1">Distributor Phone Number</label>
+                <label className="text-xs text-gray-400 block mb-1">Distributor Mobile Number</label>
                 <input
                   type="tel"
                   value={alertPhone}
                   onChange={(e) => setAlertPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
+                  placeholder="e.g. 9876543210"
                   className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-xs text-white focus:outline-none focus:border-red-600"
                   required
                 />
+                <p className="text-[10px] text-gray-500 mt-1">Dispatches via Fast2SMS gateway immediately.</p>
               </div>
 
-              <div className="p-3 bg-gray-950 border border-gray-800 rounded-lg text-xs text-gray-300">
+              <div className="p-3 bg-gray-950 border border-gray-800 rounded-lg text-xs text-gray-300 max-h-32 overflow-y-auto">
                 <span className="text-gray-500 font-semibold block mb-1">Message Preview:</span>
                 {insight}
               </div>
 
               {alertSentStatus && (
-                <div className="p-2 text-xs font-semibold text-emerald-400">
+                <div className={`p-2.5 text-xs font-semibold rounded-lg ${alertIsError ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'}`}>
                   {alertSentStatus}
                 </div>
               )}
@@ -855,7 +1000,7 @@ export default function DashboardPage() {
                   disabled={alertSending}
                   className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition disabled:opacity-50"
                 >
-                  {alertSending ? 'Sending...' : 'Send SMS'}
+                  {alertSending ? 'Sending SMS...' : 'Dispatch Fast2SMS Alert'}
                 </button>
                 <button
                   type="button"
