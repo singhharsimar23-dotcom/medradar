@@ -43,6 +43,18 @@ interface NearestPHC {
   distance: number;
 }
 
+interface ClinicalAdvisory {
+  canonical_name: string;
+  generic_composition: string;
+  therapeutic_class: string;
+  clinical_usage: string;
+  jan_aushadhi_generic: string;
+  price_comparison: string;
+  storage_cold_chain: string;
+  govt_supply_scheme: string;
+  prescription_schedule: string;
+}
+
 const CORRIDOR_HUBS = [
   { name: '📍 Live Device GPS Pin', lat: null, lng: null },
   { name: 'Karond Chowk, Bhopal', lat: 23.2845, lng: 77.4023 },
@@ -62,8 +74,8 @@ export default function PatientPage() {
   const [results, setResults] = useState<PharmacyResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Real GPS & Location State (Zero Hardcoding)
+
+  // Real GPS & Location State
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLng, setUserLng] = useState<number | null>(null);
   const [selectedHub, setSelectedHub] = useState<string>('📍 Live Device GPS Pin');
@@ -80,9 +92,12 @@ export default function PatientPage() {
   const [searchedMedicine, setSearchedMedicine] = useState('');
   const [nearestPHC, setNearestPHC] = useState<NearestPHC | null>(null);
 
+  // Clinical & Logistics Advisory
+  const [advisory, setAdvisory] = useState<ClinicalAdvisory | null>(null);
+  const [advisoryLoading, setAdvisoryLoading] = useState(false);
+
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // 1. Live Device GPS Detection
@@ -185,7 +200,23 @@ export default function PatientPage() {
     }
   }, []);
 
-  // 3. Search Handler (Real Live Supabase Database Query)
+  // 3. Fetch Clinical Advisory
+  const fetchClinicalAdvisory = async (medicineName: string) => {
+    try {
+      setAdvisoryLoading(true);
+      const res = await fetch(`/api/medicine-info?medicine=${encodeURIComponent(medicineName)}`);
+      const data = await res.json();
+      if (data.success && data.advisory) {
+        setAdvisory(data.advisory);
+      }
+    } catch (e) {
+      console.warn('Advisory fetch exception:', e);
+    } finally {
+      setAdvisoryLoading(false);
+    }
+  };
+
+  // 4. Search Handler
   const handleSearch = useCallback(
     async (e?: React.FormEvent, customQuery?: string) => {
       if (e) e.preventDefault();
@@ -202,8 +233,11 @@ export default function PatientPage() {
       setError(null);
       setWaitlistSubmitted(false);
       setReservedPharmacyId(null);
+      setAdvisory(null);
 
       try {
+        fetchClinicalAdvisory(term);
+
         const url = `/api/search?medicine=${encodeURIComponent(term)}&lat=${userLat}&lng=${userLng}&urgent=${isUrgent}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -226,7 +260,7 @@ export default function PatientPage() {
     [locationGranted, userLat, userLng, searchQuery, isUrgent]
   );
 
-  // 4. Leaflet Map Lifecycle & Re-render Fix
+  // 5. Leaflet Map Lifecycle & Re-render Fix
   useEffect(() => {
     if (!mapLoaded || !window.L || !mapRef.current || userLat === null || userLng === null) {
       return;
@@ -234,7 +268,6 @@ export default function PatientPage() {
 
     const L = window.L;
 
-    // Destroy existing instance cleanly to avoid Next.js page transition grey-map bugs
     if (leafletMapRef.current) {
       leafletMapRef.current.remove();
       leafletMapRef.current = null;
@@ -255,7 +288,6 @@ export default function PatientPage() {
 
     leafletMapRef.current = map;
 
-    // Add User GPS Marker
     const userMarker = L.circleMarker([userLat, userLng], {
       radius: 8,
       fillColor: '#2563eb',
@@ -265,7 +297,7 @@ export default function PatientPage() {
       fillOpacity: 0.95
     })
       .addTo(map)
-      .bindPopup(`<b>Your GPS Location</b><br/>${selectedHub}${gpsAccuracy ? `<br/>Accuracy: ±${gpsAccuracy.toFixed(0)}m` : ''}`);
+      .bindPopup(`<b>Your Search Location</b><br/>${selectedHub}${gpsAccuracy ? `<br/>Accuracy: ±${gpsAccuracy.toFixed(0)}m` : ''}`);
 
     const bounds = L.latLngBounds([[userLat, userLng]]);
 
@@ -310,7 +342,6 @@ export default function PatientPage() {
       map.setView([userLat, userLng], 13);
     }
 
-    // Force map tile calculation after mount
     setTimeout(() => {
       map.invalidateSize();
     }, 150);
@@ -323,7 +354,7 @@ export default function PatientPage() {
     };
   }, [mapLoaded, results, nearestPHC, userLat, userLng, selectedHub, gpsAccuracy]);
 
-  // 5. Join Waitlist (SMS Restock Alert)
+  // 6. Join Waitlist
   const handleJoinWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!waitlistPhone.trim() || !searchedMedicine || userLat === null || userLng === null) return;
@@ -505,6 +536,78 @@ export default function PatientPage() {
         {error && (
           <div className="p-3.5 bg-red-950/60 border border-red-800/80 text-red-300 text-xs rounded-lg font-medium">
             {error}
+          </div>
+        )}
+
+        {/* Clinical & Logistics Intelligence Advisory Memorandum (Directly for searched commodity) */}
+        {searchedMedicine && advisory && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-sky-400 uppercase tracking-widest">
+                  Directorate of Public Health · Clinical & Pricing Dossier
+                </span>
+                <h3 className="text-sm font-semibold text-white mt-0.5">
+                  {advisory.canonical_name}
+                </h3>
+              </div>
+              <span className="px-2.5 py-1 bg-slate-950 text-slate-300 border border-slate-800 text-[11px] font-semibold rounded-md self-start sm:self-center">
+                {advisory.prescription_schedule}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+              {/* Clinical Indication */}
+              <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-lg space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  Therapeutic Indication & Guidelines
+                </span>
+                <p className="text-slate-200 leading-relaxed">
+                  {advisory.clinical_usage}
+                </p>
+                <div className="pt-1 text-[11px] text-slate-400 font-mono">
+                  Composition: {advisory.generic_composition}
+                </div>
+              </div>
+
+              {/* Generic Pricing & Jan Aushadhi Savings */}
+              <div className="p-3 bg-slate-950 border border-teal-900/60 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-teal-400 uppercase tracking-wider">
+                    Jan Aushadhi Generic Alternative
+                  </span>
+                  <span className="px-1.5 py-0.2 bg-teal-950 text-teal-300 border border-teal-800 rounded text-[9px] font-bold">
+                    PMBJP CERTIFIED
+                  </span>
+                </div>
+                <p className="text-teal-200 font-medium">
+                  {advisory.jan_aushadhi_generic}
+                </p>
+                <p className="text-[11px] text-emerald-400 font-medium">
+                  {advisory.price_comparison}
+                </p>
+              </div>
+
+              {/* Storage & Cold-Chain Protocol */}
+              <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-lg space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  Storage & Cold-Chain Specification
+                </span>
+                <p className="text-slate-300 leading-relaxed">
+                  {advisory.storage_cold_chain}
+                </p>
+              </div>
+
+              {/* Government Buffer & Scheme Eligibility */}
+              <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-lg space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  State Emergency Buffer & Scheme Access
+                </span>
+                <p className="text-slate-300 leading-relaxed">
+                  {advisory.govt_supply_scheme}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
