@@ -1,10 +1,20 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const apiKey = process.env.GEMINI_API_KEY!;
+const genAI = new GoogleGenerativeAI(apiKey);
 
 export const getModel = () => genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-export async function parseJSON<T>(rawText: string): Promise<T> {
-  const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-  return JSON.parse(cleaned) as T;
+export function parseJSON<T>(rawText: string): T | null {
+  try {
+    const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/) || cleaned.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as T;
+    }
+    return JSON.parse(cleaned) as T;
+  } catch (err) {
+    console.warn('parseJSON fallback caught:', err);
+    return null;
+  }
 }
