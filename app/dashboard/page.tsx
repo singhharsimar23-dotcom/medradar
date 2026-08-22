@@ -49,6 +49,17 @@ interface SearchFeedItem {
   city?: string;
 }
 
+interface InteractionLog {
+  id: string;
+  timestamp: string;
+  role: 'PHARMACIST' | 'DISTRIBUTOR' | 'PATIENT' | 'ASHA';
+  actor: string;
+  location: string;
+  medicine: string;
+  action: string;
+  status: 'VERIFIED' | 'RESTOCKED' | 'QUEUED' | 'UNFULFILLED';
+}
+
 interface PendingPharmacy {
   id: string;
   name: string;
@@ -72,22 +83,70 @@ const INITIAL_CORRIDOR_FEED: SearchFeedItem[] = [
   { id: 'f-2', medicine_name: 'Salbutamol Inhaler 100mcg', lat: 23.2003, lng: 77.0857, area: 'Sehore Mandi Hub', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 6 * 60000).toISOString() },
   { id: 'f-3', medicine_name: 'Metformin 500mg', lat: 23.2656, lng: 77.4201, area: 'Hamidia Road, Old Bhopal', zoneType: 'Urban', is_urgent: false, created_at: new Date(Date.now() - 14 * 60000).toISOString() },
   { id: 'f-4', medicine_name: 'Azithromycin 500mg', lat: 23.0186, lng: 76.7206, area: 'Ashta Bus Terminal', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 22 * 60000).toISOString() },
-  { id: 'f-5', medicine_name: 'Insulin Regular', lat: 22.9623, lng: 76.0511, area: 'Dewas Gate Sector', zoneType: 'Urban', is_urgent: true, created_at: new Date(Date.now() - 35 * 60000).toISOString() },
-  { id: 'f-6', medicine_name: 'Glimepiride 1mg', lat: 23.1170, lng: 77.2500, area: 'Obaidullaganj Bypass', zoneType: 'Rural', is_urgent: false, created_at: new Date(Date.now() - 48 * 60000).toISOString() },
-  { id: 'f-7', medicine_name: 'ORS Sachet', lat: 23.6300, lng: 77.3400, area: 'Berasia Primary Health Sector', zoneType: 'Rural', is_urgent: false, created_at: new Date(Date.now() - 64 * 60000).toISOString() },
-  { id: 'f-8', medicine_name: 'Metformin 500mg', lat: 22.7196, lng: 75.8577, area: 'Vijay Nagar, Indore', zoneType: 'Urban', is_urgent: false, created_at: new Date(Date.now() - 79 * 60000).toISOString() },
-  { id: 'f-9', medicine_name: 'Artemether + Lumefantrine', lat: 22.9800, lng: 77.0100, area: 'Ichhawar Rural Corridor', zoneType: 'Rural', is_urgent: true, created_at: new Date(Date.now() - 95 * 60000).toISOString() },
-  { id: 'f-10', medicine_name: 'Paracetamol 500mg', lat: 23.2345, lng: 77.4356, area: 'Govindpura Sector', zoneType: 'Semi-Urban', is_urgent: false, created_at: new Date(Date.now() - 110 * 60000).toISOString() }
+  { id: 'f-5', medicine_name: 'Insulin Regular', lat: 22.9623, lng: 76.0511, area: 'Dewas Gate Sector', zoneType: 'Urban', is_urgent: true, created_at: new Date(Date.now() - 35 * 60000).toISOString() }
 ];
 
-const CORRIDOR_RANDOM_POOLS = [
-  { med: 'Insulin Regular', area: 'Karond Chowk, Bhopal', zone: 'Semi-Urban' as const, lat: 23.2845, lng: 77.4023 },
-  { med: 'Metformin 500mg', area: 'Sehore Mandi Hub', zone: 'Rural' as const, lat: 23.2003, lng: 77.0857 },
-  { med: 'Salbutamol Inhaler', area: 'Ashta Bypass', zone: 'Rural' as const, lat: 23.0186, lng: 76.7206 },
-  { med: 'Azithromycin 500mg', area: 'Station Road, Old Bhopal', zone: 'Urban' as const, lat: 23.2656, lng: 77.4201 },
-  { med: 'Insulin Regular', area: 'AB Road, Dewas', zone: 'Urban' as const, lat: 22.9623, lng: 76.0511 },
-  { med: 'ORS Sachet', area: 'Berasia Rural Hub', zone: 'Rural' as const, lat: 23.6300, lng: 77.3400 },
-  { med: 'Metformin SR 500mg', area: 'Palasia Square, Indore', zone: 'Urban' as const, lat: 22.7250, lng: 75.8620 }
+const INITIAL_INTERACTIONS: InteractionLog[] = [
+  {
+    id: 'int-1',
+    timestamp: new Date(Date.now() - 1 * 60000).toISOString(),
+    role: 'PHARMACIST',
+    actor: 'Sharma Medical Karond',
+    location: 'Karond Chowk, Bhopal',
+    medicine: 'Insulin Regular',
+    action: 'WhatsApp Stock Update → 40 Vials IN STOCK (3 Patients SMS Notified)',
+    status: 'RESTOCKED'
+  },
+  {
+    id: 'int-2',
+    timestamp: new Date(Date.now() - 4 * 60000).toISOString(),
+    role: 'DISTRIBUTOR',
+    actor: 'Govindpura C&F Depot',
+    location: 'Industrial Area, Bhopal',
+    medicine: 'Metformin 500mg & Insulin',
+    action: 'Emergency Buffer Dispatched along NH-46 to Sehore CHC',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'int-3',
+    timestamp: new Date(Date.now() - 9 * 60000).toISOString(),
+    role: 'PATIENT',
+    actor: 'Patient (+91 98260•••••)',
+    location: 'Vijay Nagar, Indore',
+    medicine: 'Metformin 500mg',
+    action: 'Location Search Completed → 2 Jan Aushadhi Matches Returned',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'int-4',
+    timestamp: new Date(Date.now() - 16 * 60000).toISOString(),
+    role: 'ASHA',
+    actor: 'Sunita Devi (ASHA Sector 4)',
+    location: 'Ichhawar Rural Zone, Sehore',
+    medicine: 'Salbutamol 100mcg Inhaler',
+    action: 'Batch Waitlist Registered for 3 Chronic Asthma Patients',
+    status: 'QUEUED'
+  },
+  {
+    id: 'int-5',
+    timestamp: new Date(Date.now() - 25 * 60000).toISOString(),
+    role: 'PATIENT',
+    actor: 'Patient (+91 94250•••••)',
+    location: 'Ashta Bus Stand',
+    medicine: 'Azithromycin 500mg',
+    action: 'Search Deficit Logged → 0 Retail Stock within 15km',
+    status: 'UNFULFILLED'
+  },
+  {
+    id: 'int-6',
+    timestamp: new Date(Date.now() - 42 * 60000).toISOString(),
+    role: 'PHARMACIST',
+    actor: 'PMBJP Kendra Palasia',
+    location: 'Old Palasia, Indore',
+    medicine: 'Metformin 500mg',
+    action: 'Generic Stock Verified via WhatsApp Scan → 500 Strips @ ₹12',
+    status: 'RESTOCKED'
+  }
 ];
 
 export default function DashboardPage() {
@@ -101,6 +160,9 @@ export default function DashboardPage() {
   const [shortageMedsCount, setShortageMedsCount] = useState<number>(5);
 
   const [liveFeed, setLiveFeed] = useState<SearchFeedItem[]>(INITIAL_CORRIDOR_FEED);
+  const [interactions, setInteractions] = useState<InteractionLog[]>(INITIAL_INTERACTIONS);
+  const [interactionFilter, setInteractionFilter] = useState<'ALL' | 'SUPPLY' | 'PATIENT' | 'ASHA'>('ALL');
+
   const [showAllFeedModal, setShowAllFeedModal] = useState<boolean>(false);
   const [feedFilter, setFeedFilter] = useState<'ALL' | 'RURAL' | 'URBAN' | 'URGENT'>('ALL');
 
@@ -120,10 +182,8 @@ export default function DashboardPage() {
   const [alertSending, setAlertSending] = useState(false);
   const [alertSentStatus, setAlertSentStatus] = useState<string | null>(null);
 
-  // Time elapsed counter
   const [secondsAgo, setSecondsAgo] = useState(0);
 
-  // Map references
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<any>(null);
   const heatLayerRef = useRef<any[]>([]);
@@ -155,9 +215,15 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 2. Fetch Auxiliary Records
+  // 2. Fetch Auxiliary Records & Interactions
   const fetchAuxiliaryData = useCallback(async () => {
     try {
+      const intRes = await fetch('/api/interactions');
+      const intData = await intRes.json();
+      if (intData.interactions) {
+        setInteractions(intData.interactions);
+      }
+
       const { data: pendingData } = await supabase
         .from('pharmacies')
         .select('id, name, area, phone, lat, lng')
@@ -177,7 +243,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 3. Initial Load, 30s Refresh & 12s Telemetry Pulse
+  // 3. Initial Load, 30s Refresh & 15s Interactions Refresh
   useEffect(() => {
     fetchRadarData();
     fetchAuxiliaryData();
@@ -191,47 +257,9 @@ export default function DashboardPage() {
       setSecondsAgo((prev) => prev + 1);
     }, 1000);
 
-    const telemetryInterval = setInterval(() => {
-      const randomItem = CORRIDOR_RANDOM_POOLS[Math.floor(Math.random() * CORRIDOR_RANDOM_POOLS.length)];
-      const isUrgent = Math.random() > 0.6;
-
-      const newEvent: SearchFeedItem = {
-        id: `event-${Date.now()}`,
-        medicine_name: randomItem.med,
-        area: randomItem.area,
-        zoneType: randomItem.zone,
-        lat: randomItem.lat,
-        lng: randomItem.lng,
-        is_urgent: isUrgent,
-        created_at: new Date().toISOString()
-      };
-
-      setLiveFeed((prev) => [newEvent, ...prev.slice(0, 49)]);
-      setTotalFailures((prev) => prev + 1);
-      if (isUrgent) setUrgentToday((prev) => prev + 1);
-
-      if (leafletMapRef.current && window.L) {
-        const L = window.L;
-        const newCircle = L.circle([randomItem.lat, randomItem.lng], {
-          radius: 1400,
-          color: '#dc2626',
-          weight: 1.5,
-          fillColor: '#ef4444',
-          fillOpacity: 0.55
-        }).addTo(leafletMapRef.current);
-
-        newCircle.bindTooltip(
-          `<strong>Deficit Alert</strong><br/>${randomItem.med}<br/>${randomItem.area}`,
-          { direction: 'top', sticky: true }
-        );
-        heatLayerRef.current.push(newCircle);
-      }
-    }, 12000);
-
     return () => {
       clearInterval(radarInterval);
       clearInterval(timer);
-      clearInterval(telemetryInterval);
     };
   }, [fetchRadarData, fetchAuxiliaryData]);
 
@@ -373,6 +401,7 @@ export default function DashboardPage() {
       if (res.ok && data.success) {
         setSimulateResult(`Inventory reallocated at ${data.pharmacy}. ${data.notified} registered patients notified.`);
         fetchRadarData();
+        fetchAuxiliaryData();
       } else {
         setSimulateResult(`Simulation unsuccessful: ${data.error || 'Please retry.'}`);
       }
@@ -443,16 +472,16 @@ export default function DashboardPage() {
     return `${Math.floor(min / 60)}h ago`;
   };
 
-  const filteredFeed = liveFeed.filter((item) => {
-    if (feedFilter === 'RURAL') return item.zoneType === 'Rural';
-    if (feedFilter === 'URBAN') return item.zoneType === 'Urban' || item.zoneType === 'Semi-Urban';
-    if (feedFilter === 'URGENT') return item.is_urgent === true;
+  const filteredInteractions = interactions.filter((item) => {
+    if (interactionFilter === 'SUPPLY') return item.role === 'PHARMACIST' || item.role === 'DISTRIBUTOR';
+    if (interactionFilter === 'PATIENT') return item.role === 'PATIENT';
+    if (interactionFilter === 'ASHA') return item.role === 'ASHA';
     return true;
   });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-16">
-      {/* Enterprise Top Navigation */}
+      {/* Top Header */}
       <header className="border-b border-slate-800 bg-slate-900/95 px-6 py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 sticky top-0 z-30 backdrop-blur-md">
         <div className="flex items-center space-x-3">
           <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
@@ -466,7 +495,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Action Controls & Indicators */}
+        {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800/80 border border-slate-700/60 rounded-md text-xs text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -578,25 +607,8 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Filter Buttons */}
-            <div className="flex items-center space-x-1 pb-2.5">
-              {(['ALL', 'RURAL', 'URBAN', 'URGENT'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setFeedFilter(tab)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
-                    feedFilter === tab
-                      ? 'bg-slate-700 text-white'
-                      : 'bg-slate-800/60 text-slate-400 hover:bg-slate-800'
-                  }`}
-                >
-                  {tab === 'ALL' ? 'All Records' : tab.charAt(0) + tab.slice(1).toLowerCase()}
-                </button>
-              ))}
-            </div>
-
             <div className="flex-1 overflow-y-auto max-h-[330px] space-y-2 pr-1">
-              {filteredFeed.slice(0, 15).map((item) => {
+              {liveFeed.map((item) => {
                 const timeStr = new Date(item.created_at).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit'
@@ -629,7 +641,94 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 2: Editorial Logistics Advisory */}
+        {/* Row 2: NEW! Real-Time Stakeholder Communications & Dispatch Audit Feed (Directly above Advisory) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                  Live Stakeholder Communications & Dispatch Audit Feed
+                </h2>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Real-time multi-actor interaction log (Pharmacist stock updates, Distributor reallocations, Patient searches, ASHA requests)
+              </p>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center space-x-1.5">
+              {(['ALL', 'SUPPLY', 'PATIENT', 'ASHA'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setInteractionFilter(tab)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                    interactionFilter === tab
+                      ? 'bg-slate-700 text-white'
+                      : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {tab === 'ALL'
+                    ? 'All Interactions'
+                    : tab === 'SUPPLY'
+                    ? 'Pharmacist & Distributor'
+                    : tab === 'PATIENT'
+                    ? 'Patient Inquiries'
+                    : 'ASHA Triages'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-800/70 overflow-hidden">
+            {filteredInteractions.slice(0, 6).map((item) => (
+              <div key={item.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-slate-950/40 px-2 rounded-md transition">
+                <div className="flex items-start space-x-3">
+                  <span className="font-mono text-slate-500 text-[11px] whitespace-nowrap pt-0.5">
+                    {formatTimeAgo(item.timestamp)}
+                  </span>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold tracking-wider ${
+                        item.role === 'PHARMACIST'
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/80'
+                          : item.role === 'DISTRIBUTOR'
+                          ? 'bg-indigo-950 text-indigo-300 border border-indigo-800/80'
+                          : item.role === 'ASHA'
+                          ? 'bg-amber-950 text-amber-300 border border-amber-800/80'
+                          : 'bg-blue-950 text-blue-300 border border-blue-800/80'
+                      }`}>
+                        {item.role}
+                      </span>
+                      <span className="font-semibold text-slate-100">{item.actor}</span>
+                      <span className="text-slate-500">·</span>
+                      <span className="text-slate-400">{item.location}</span>
+                    </div>
+                    <p className="text-slate-300 mt-1">
+                      <span className="font-medium text-white">{item.medicine}:</span> {item.action}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 self-start md:self-center">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                    item.status === 'RESTOCKED'
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                      : item.status === 'VERIFIED'
+                      ? 'bg-blue-950 text-blue-400 border border-blue-800'
+                      : item.status === 'QUEUED'
+                      ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                      : 'bg-red-950 text-red-400 border border-red-800'
+                  }`}>
+                    {item.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Row 3: Editorial Logistics Advisory */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-5 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div>
@@ -700,7 +799,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Row 3: Shortage Velocity Matrix */}
+        {/* Row 4: Shortage Velocity Matrix */}
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -769,7 +868,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Row 4: Pending Stockist Onboarding */}
+        {/* Row 5: Pending Stockist Onboarding */}
         {pendingPharmacies.length > 0 && (
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3">
@@ -847,7 +946,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {filteredFeed.map((item) => (
+              {liveFeed.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-md text-xs"
