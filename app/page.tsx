@@ -81,22 +81,21 @@ export default function PatientPage() {
           }
         },
         (err) => {
-          console.warn('Geolocation error:', err);
-          setError('Location nahi mila. GPS on karke try karo.');
+          console.warn('Geolocation access error:', err);
+          setError('Location access required to calculate accurate distance.');
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
     } else {
-      setError('Aapke phone mein geolocation support nahi hai.');
+      setError('Geolocation is not supported by your browser.');
     }
   }, []);
 
-  // Try auto-requesting location on mount
   useEffect(() => {
     requestLocation();
   }, [requestLocation]);
 
-  // 2. Dynamically Load Leaflet via CDN
+  // 2. Load Leaflet CDN
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -125,19 +124,17 @@ export default function PatientPage() {
     }
   }, []);
 
-  // 3. Search Execution Function
+  // 3. Search Handler
   const handleSearch = useCallback(
     async (e?: React.FormEvent) => {
       if (e) e.preventDefault();
 
       if (!locationGranted || userLat === null || userLng === null) {
-        setError('Pehle location allow karo');
+        setError('Please enable location access to find nearby pharmacies.');
         return;
       }
 
-      if (!searchQuery.trim()) {
-        return;
-      }
+      if (!searchQuery.trim()) return;
 
       setLoading(true);
       setError(null);
@@ -152,7 +149,7 @@ export default function PatientPage() {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || 'Search karne mein dikkat aayi');
+          throw new Error(data.error || 'Search query failed.');
         }
 
         const returnedResults: PharmacyResult[] = data.results || [];
@@ -162,7 +159,7 @@ export default function PatientPage() {
         setShowWaitlist(returnedResults.length === 0);
       } catch (err: any) {
         console.error('Search error:', err);
-        setError(err.message || 'Network error. Kripya dobara koshish karein.');
+        setError(err.message || 'Network error. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -170,7 +167,7 @@ export default function PatientPage() {
     [locationGranted, userLat, userLng, searchQuery, isUrgent]
   );
 
-  // 4. Initialize & Update Leaflet Map
+  // 4. Update Map
   useEffect(() => {
     if (!mapLoaded || !window.L || !mapRef.current || userLat === null || userLng === null) {
       return;
@@ -180,8 +177,8 @@ export default function PatientPage() {
 
     if (!leafletMapRef.current) {
       const map = L.map(mapRef.current).setView([userLat, userLng], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
         maxZoom: 18
       }).addTo(map);
       leafletMapRef.current = map;
@@ -189,13 +186,11 @@ export default function PatientPage() {
 
     const map = leafletMapRef.current;
 
-    // Clear old markers
     markersRef.current.forEach((m) => map.removeLayer(m));
     markersRef.current = [];
 
-    // Add Blue User Location Marker
     const userMarker = L.circleMarker([userLat, userLng], {
-      radius: 8,
+      radius: 7,
       fillColor: '#2563eb',
       color: '#ffffff',
       weight: 2,
@@ -203,43 +198,41 @@ export default function PatientPage() {
       fillOpacity: 0.95
     })
       .addTo(map)
-      .bindPopup('<b>Aapki Location</b>');
+      .bindPopup('<b>Your Current Location</b>');
     markersRef.current.push(userMarker);
 
     const bounds = L.latLngBounds([[userLat, userLng]]);
 
-    // Add Green Markers for Result Pharmacies
     results.forEach((ph) => {
       if (ph.lat !== null && ph.lng !== null) {
         const marker = L.circleMarker([ph.lat, ph.lng], {
-          radius: 9,
+          radius: 8,
           fillColor: ph.is_open ? '#16a34a' : '#dc2626',
           color: '#ffffff',
-          weight: 2,
+          weight: 1.5,
           opacity: 1,
           fillOpacity: 0.9
         })
           .addTo(map)
           .bindPopup(
-            `<b>${ph.name}</b><br/>${ph.distance.toFixed(1)} km • ${ph.is_open ? 'Open' : 'Closed'}`
+            `<b>${ph.name}</b><br/>${ph.distance.toFixed(1)} km · ${ph.is_open ? 'Open' : 'Closed'}`
           );
         markersRef.current.push(marker);
         bounds.extend([ph.lat, ph.lng]);
       }
     });
 
-    // Add Nearest PHC Marker if Present
     if (nearestPHC && nearestPHC.lat && nearestPHC.lng) {
       const phcMarker = L.circleMarker([nearestPHC.lat, nearestPHC.lng], {
-        radius: 8,
+        radius: 7.5,
         fillColor: '#0284c7',
         color: '#ffffff',
-        weight: 2,
+        weight: 1.5,
         opacity: 1,
         fillOpacity: 0.9
       })
         .addTo(map)
-        .bindPopup(`<b>${nearestPHC.name} (Sarkaari)</b><br/>${nearestPHC.distance.toFixed(1)} km`);
+        .bindPopup(`<b>${nearestPHC.name} (Government PHC/CHC)</b><br/>${nearestPHC.distance.toFixed(1)} km`);
       markersRef.current.push(phcMarker);
       bounds.extend([nearestPHC.lat, nearestPHC.lng]);
     }
@@ -251,7 +244,6 @@ export default function PatientPage() {
     }
   }, [mapLoaded, results, nearestPHC, userLat, userLng]);
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (leafletMapRef.current) {
@@ -261,13 +253,13 @@ export default function PatientPage() {
     };
   }, []);
 
-  // 5. Supabase Realtime Subscription for Stock Updates
+  // 5. Realtime stock subscription
   useEffect(() => {
     if (!searchedMedicine) return;
 
     const firstWord = searchedMedicine.trim().split(/\s+/)[0];
     const channel = supabase
-      .channel('stock-changes')
+      .channel('stock-sync')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'stock' },
@@ -288,7 +280,7 @@ export default function PatientPage() {
     };
   }, [searchedMedicine, handleSearch]);
 
-  // 6. Submit Waitlist Handler
+  // 6. Join Waitlist
   const handleJoinWaitlist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!waitlistPhone.trim() || userLat === null || userLng === null || !searchedMedicine) {
@@ -313,56 +305,56 @@ export default function PatientPage() {
       if (res.ok && data.success) {
         setWaitlistSubmitted(true);
       } else {
-        setError(data.error || 'Waitlist join karne mein dikkat aayi.');
+        setError(data.error || 'Unable to register notification request.');
       }
     } catch (err) {
-      console.error('Waitlist submit error:', err);
-      setError('SMS service se connect nahi ho paya.');
+      console.error('Waitlist registration error:', err);
+      setError('Unable to reach restock alert service.');
     } finally {
       setWaitlistLoading(false);
     }
   };
 
   const formatMinutesAgo = (timestamp: string | null) => {
-    if (!timestamp) return 'Recently';
+    if (!timestamp) return 'Recently verified';
     const diffMin = Math.floor((Date.now() - new Date(timestamp).getTime()) / (1000 * 60));
-    if (diffMin <= 1) return 'Abhi-abhi';
-    if (diffMin < 60) return `Updated ${diffMin} min ago`;
+    if (diffMin <= 1) return 'Just now';
+    if (diffMin < 60) return `Verified ${diffMin}m ago`;
     const diffHours = Math.floor(diffMin / 60);
-    return `Updated ${diffHours}h ago`;
+    return `Verified ${diffHours}h ago`;
   };
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 flex flex-col font-sans pb-12">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-12">
       {/* Header */}
-      <header className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-20">
-        <div className="flex items-center space-x-2">
-          <span className="text-xl leading-none">🔴</span>
-          <span className="text-xl font-bold tracking-tight text-gray-900">MedRadar</span>
-          <span className="text-xs font-semibold uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded">
-            Bhopal
-          </span>
+      <header className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white sticky top-0 z-20">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-600"></div>
+          <span className="text-base font-semibold tracking-tight text-slate-900">MedRadar</span>
+          <span className="text-xs text-slate-400 font-normal">|</span>
+          <span className="text-xs text-slate-500 font-medium">Bhopal Region</span>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="w-full max-w-md mx-auto px-4 pt-4 flex-1 flex flex-col space-y-4">
-        {/* Search Section */}
-        <section className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+      <main className="w-full max-w-lg mx-auto px-4 pt-5 flex-1 flex flex-col space-y-4">
+        {/* Search Box */}
+        <section className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
           <form onSubmit={handleSearch} className="flex flex-col space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-gray-700">Dawa ka naam likhein</label>
+              <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Medicine or Formula Name
+              </label>
               <button
                 type="button"
                 onClick={() => setIsUrgent(!isUrgent)}
-                className={`min-h-[44px] px-3 py-1 text-sm font-semibold rounded-lg border transition-colors flex items-center space-x-1 ${
+                className={`text-xs px-2.5 py-1 font-medium rounded border transition ${
                   isUrgent
                     ? 'bg-red-600 text-white border-red-700'
-                    : 'bg-white text-gray-700 border-gray-300'
+                    : 'bg-slate-100 text-slate-600 border-slate-300'
                 }`}
               >
-                <span>🚨</span>
-                <span>Urgent</span>
+                Mark as Critical
               </button>
             </div>
 
@@ -370,111 +362,100 @@ export default function PatientPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSearch(e);
-              }}
-              placeholder="Medicine name... (Metformin, Crocin, Insulin)"
-              className="w-full min-h-[44px] px-3 py-2 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-red-600"
+              placeholder="e.g. Metformin 500mg, Insulin Regular, Paracetamol..."
+              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-red-600"
             />
-
-            <p className="text-xs text-gray-500">Brand ya generic naam — dono chalega</p>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full min-h-[44px] bg-red-600 hover:bg-red-700 text-white font-bold text-base py-2.5 px-4 rounded-lg shadow-sm active:scale-[0.99] disabled:opacity-50"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium text-sm py-2.5 px-4 rounded-md shadow-sm transition disabled:opacity-50"
             >
-              {loading ? 'Dhundh rahe hain...' : '🔍 Dhundho'}
+              {loading ? 'Checking local pharmacy inventory...' : 'Find Verified Stock'}
             </button>
           </form>
         </section>
 
-        {/* Location Section */}
+        {/* Location Notice */}
         {!locationGranted && (
-          <section className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex flex-col space-y-2">
-            <p className="text-sm font-medium text-amber-900">
-              📍 Location zaruri hai medicine dhundhne ke liye
+          <section className="bg-amber-50 border border-amber-200 p-3.5 rounded-lg flex flex-col space-y-2">
+            <p className="text-xs font-medium text-amber-900">
+              Location access is required to compute driving distance to nearest stockists.
             </p>
             <button
               type="button"
               onClick={requestLocation}
-              className="w-full min-h-[44px] bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm py-2 px-4 rounded-lg shadow-sm"
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs py-2 px-3 rounded-md transition"
             >
-              Location Allow Karo
+              Allow GPS Location
             </button>
           </section>
         )}
 
         {/* Error Banner */}
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg font-medium">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md font-medium">
             {error}
           </div>
         )}
 
-        {/* Map Section */}
+        {/* Map View */}
         {results.length > 0 && (
-          <section className="rounded-xl overflow-hidden border border-gray-300 shadow-sm">
-            <div id="patient-leaflet-map" ref={mapRef} className="w-full h-[250px] bg-gray-100" />
+          <section className="rounded-lg overflow-hidden border border-slate-300 shadow-sm">
+            <div id="patient-leaflet-map" ref={mapRef} className="w-full h-[240px] bg-slate-100" />
           </section>
         )}
 
-        {/* Results Section */}
-        {loading && (
-          <div className="text-center py-8 text-gray-500 font-medium text-base">
-            ⏳ Dhundh rahe hain...
-          </div>
-        )}
-
+        {/* Results List */}
         {!loading && results.length > 0 && (
           <section className="flex flex-col space-y-3">
-            <h2 className="text-base font-bold text-gray-900">
-              ✅ {searchedMedicine} mila — {results.length} pharmacy nearby
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Verified Locations ({results.length} Available Nearby)
             </h2>
 
-            <div className="flex flex-col space-y-3">
+            <div className="flex flex-col space-y-2.5">
               {results.map((item) => (
                 <div
                   key={item.id}
-                  className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col space-y-2"
+                  className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col space-y-2"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="font-bold text-base text-gray-900">{item.name}</h3>
-                      <p className="text-xs text-gray-500">{item.area || item.address || 'Bhopal'}</p>
+                      <h3 className="font-semibold text-sm text-slate-900">{item.name}</h3>
+                      <p className="text-xs text-slate-500">{item.area || item.address || 'Bhopal'}</p>
                     </div>
-                    <span className="bg-green-100 text-green-700 border border-green-200 text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-2 py-0.5 rounded-full">
                       {item.distance.toFixed(1)} km
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                     {item.type === 'PHC' && (
-                      <span className="bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded">
-                        PHC
+                      <span className="bg-blue-50 text-blue-700 border border-blue-200 font-medium px-2 py-0.5 rounded">
+                        Government PHC
                       </span>
                     )}
                     {item.type === 'janaushadhi' && (
-                      <span className="bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded">
-                        Janaushadhi
+                      <span className="bg-teal-50 text-teal-700 border border-teal-200 font-medium px-2 py-0.5 rounded">
+                        Jan Aushadhi Kendra
                       </span>
                     )}
                     {!item.is_open && (
-                      <span className="text-red-600 font-bold">❌ CLOSED</span>
+                      <span className="text-red-600 font-semibold">Closed currently</span>
                     )}
                     {item.isStale && (
-                      <span className="text-orange-500 font-semibold">⚠️ 6h+ purana data</span>
+                      <span className="text-amber-600 font-medium">Pending 6h re-verification</span>
                     )}
-                    <span className="text-gray-400">• {formatMinutesAgo(item.updated_at)}</span>
+                    <span className="text-slate-400">· {formatMinutesAgo(item.updated_at)}</span>
                   </div>
 
                   {item.phone && (
-                    <div className="pt-2">
+                    <div className="pt-1.5">
                       <a
                         href={`tel:${item.phone}`}
-                        className="w-full min-h-[44px] flex items-center justify-center bg-gray-900 hover:bg-black text-white font-bold text-sm rounded-lg"
+                        className="w-full flex items-center justify-center bg-slate-900 hover:bg-black text-white font-medium text-xs py-2 rounded-md transition"
                       >
-                        📞 Call ({item.phone})
+                        Contact Pharmacy ({item.phone})
                       </a>
                     </div>
                   )}
@@ -486,59 +467,59 @@ export default function PatientPage() {
 
         {/* Zero Result State */}
         {!loading && results.length === 0 && searchedMedicine && (
-          <section className="p-4 bg-gray-50 border border-gray-200 rounded-xl flex flex-col space-y-4">
+          <section className="p-4 bg-white border border-slate-200 rounded-lg flex flex-col space-y-4">
             <div>
-              <h2 className="text-base font-bold text-red-600">❌ {searchedMedicine} nahi mila</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                0 pharmacies within 15km have stock
+              <h2 className="text-sm font-semibold text-red-600">No Retail Stock Reported</h2>
+              <p className="text-xs text-slate-600 mt-0.5">
+                0 registered retail chemists within 15km have reported active inventory of {searchedMedicine}.
               </p>
             </div>
 
-            {/* Sarkaari Option */}
+            {/* Public Health Alternative */}
             {nearestPHC && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-900 space-y-1">
                 <p className="font-semibold">
-                  🏥 Sarkaari option: {nearestPHC.name} ({nearestPHC.distance.toFixed(1)}km)
+                  Designated Public Facility: {nearestPHC.name} ({nearestPHC.distance.toFixed(1)} km)
                 </p>
-                <p className="text-xs text-blue-700 mt-0.5">Generic medicines available</p>
+                <p className="text-blue-700">Generic equivalents stocked under Essential Drugs List.</p>
                 {nearestPHC.phone && (
                   <a
                     href={`tel:${nearestPHC.phone}`}
-                    className="inline-block mt-2 text-xs font-bold text-blue-800 underline"
+                    className="inline-block mt-1 text-xs font-semibold text-blue-800 underline"
                   >
-                    📞 Call {nearestPHC.phone}
+                    Contact {nearestPHC.phone}
                   </a>
                 )}
               </div>
             )}
 
-            {/* SMS Waitlist */}
-            <div className="pt-2 border-t border-gray-200 flex flex-col space-y-3">
-              <p className="text-sm font-semibold text-gray-800">
-                📱 SMS alert chahiye jab stock milega?
+            {/* Restock Notification Form */}
+            <div className="pt-2 border-t border-slate-200 flex flex-col space-y-2.5">
+              <p className="text-xs font-semibold text-slate-800">
+                Register for Automated Restock Notification (SMS)
               </p>
 
               {waitlistSubmitted ? (
-                <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-sm font-semibold rounded-lg">
-                  ✓ Done! SMS aayega jab paas mein milega.
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium rounded-md">
+                  Request registered. You will receive an instant SMS notification as soon as a verified pharmacy within 10km updates stock.
                 </div>
               ) : (
-                <form onSubmit={handleJoinWaitlist} className="flex flex-col space-y-2.5">
+                <form onSubmit={handleJoinWaitlist} className="flex flex-col space-y-2">
                   <input
                     type="tel"
                     value={waitlistPhone}
                     onChange={(e) => setWaitlistPhone(e.target.value)}
-                    placeholder="Phone number (10-digit)"
-                    className="w-full min-h-[44px] px-3 py-2 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600"
+                    placeholder="Enter 10-digit mobile number"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-600"
                     required
                   />
 
                   <button
                     type="submit"
                     disabled={waitlistLoading}
-                    className="w-full min-h-[44px] bg-gray-900 hover:bg-black text-white font-bold text-sm rounded-lg disabled:opacity-50"
+                    className="w-full bg-slate-900 hover:bg-black text-white font-medium text-xs py-2 rounded-md transition disabled:opacity-50"
                   >
-                    {waitlistLoading ? 'Saving...' : 'Notify Karo'}
+                    {waitlistLoading ? 'Registering...' : 'Register Restock Alert'}
                   </button>
                 </form>
               )}

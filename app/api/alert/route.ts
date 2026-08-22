@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
 
     if (!phone || !message) {
       return NextResponse.json(
-        { error: 'Both phone and message are required.' },
+        { error: 'Contact number and alert payload are required.' },
         { status: 400 }
       );
     }
@@ -16,21 +16,21 @@ export async function POST(req: NextRequest) {
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) {
       return NextResponse.json(
-        { error: 'Please enter a valid 10-digit Indian mobile number.' },
+        { error: 'Please provide a valid 10-digit mobile number.' },
         { status: 400 }
       );
     }
 
-    const smsContent = `MedRadar Corridor Alert: ${message.slice(0, 130)}... https://medradar-vit.vercel.app`;
+    const smsContent = `MedRadar Corridor Advisory: ${message.slice(0, 130)}... Reference: https://medradar-vit.vercel.app`;
 
     const result = await sendSMS(cleanPhone, smsContent);
 
     return NextResponse.json({
       success: true,
-      message: result.message || `Distributor alert queued for +91 ${cleanPhone}.`
+      message: result.message || `Advisory successfully transmitted to +91 ${cleanPhone}.`
     });
   } catch (err: any) {
     console.error('Alert dispatch error:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Unable to process notification request at this time.' }, { status: 500 });
   }
 }
